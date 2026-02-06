@@ -2113,7 +2113,12 @@ Example formats supported:
         }
 
         function generateId() {
-            return 'p_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+            // Generate proper UUID v4
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
         }
 
         // =====================
@@ -2627,6 +2632,7 @@ Example formats supported:
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`,
+                    'apikey': SUPABASE_ANON_KEY,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ productName, productId })
@@ -2734,11 +2740,13 @@ Example formats supported:
 
             console.log('Calling format-pricelist Edge Function...');
             console.log('Input length:', rawText.length);
+            console.log('Token preview:', session.access_token?.substring(0, 50) + '...');
 
             const response = await fetch(`${SUPABASE_URL}/functions/v1/format-pricelist`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`,
+                    'apikey': SUPABASE_ANON_KEY,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ rawText })
