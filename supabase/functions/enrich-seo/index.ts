@@ -80,7 +80,7 @@ serve(async (req) => {
 
 Create an SEO title and DETAILED technical specifications.
 
-SEO Title: "Brand Model: Key specs summary" (e.g., "Dell Optiplex 7020: Intel Core i5, 8GB RAM, 512GB SSD, 20" Monitor")
+SEO Title: Include brand, model, CPU gen, RAM, storage, display size, and OS (e.g., "Dell Optiplex 7020 SFF: Intel Core i5 14th Gen, 8GB DDR4, 512GB NVMe SSD, 20" E2020H Monitor, Windows 11 Pro")
 
 Specs: Use ✅ bullets with DETAILED info for each:
 ✅ Processor: Full model name, generation, cores, threads, speed, cache
