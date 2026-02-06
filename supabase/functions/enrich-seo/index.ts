@@ -28,24 +28,33 @@ serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
+      console.error('Auth error:', userError)
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Unauthorized: ' + (userError?.message || 'No user') }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const { data: settings } = await supabaseClient
+    console.log('User authenticated:', user.email)
+
+    const { data: settings, error: settingsError } = await supabaseClient
       .from('user_settings')
       .select('gemini_api_key, gemini_model')
       .eq('user_id', user.id)
       .single()
 
+    if (settingsError) {
+      console.error('Settings error:', settingsError)
+    }
+
     if (!settings?.gemini_api_key) {
       return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured' }),
+        JSON.stringify({ error: 'Gemini API key not configured. Please add it in Settings.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log('Gemini API key found, model:', settings.gemini_model)
 
     const { productName, productId } = await req.json()
     if (!productName) {
@@ -54,6 +63,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log('Enriching product:', productName)
 
     const model = settings.gemini_model || 'gemini-2.5-flash'
 
@@ -76,7 +87,7 @@ Create a formatted product title like this:
 Example: "Dell Vostro 3030 MT: Intel Core i5 12th Gen, 8GB RAM, 512GB SSD, 19.5" E2020H Monitor, Ubuntu"
 
 TASK 2 - Technical Specifications:
-Create detailed specs using checkmark bullet points (use the checkmark symbol). Include ALL relevant specifications.
+Create detailed specs using checkmark bullet points (use ✅). Include ALL relevant specifications.
 
 For MONITORS include: Panel type, Resolution, Refresh rate, Response time, Ports, Stand adjustments, VESA mount
 For LAPTOPS include: Processor, RAM, Storage, Display, Graphics, Battery, Weight, Ports, OS, Warranty
@@ -84,12 +95,8 @@ For DESKTOPS include: Processor, RAM, Storage, Graphics, Ports, Bundled monitor 
 
 Look up the ACTUAL specifications for this product from your knowledge.
 
-Respond in JSON format:
-{
-  "seoTitle": "Brand Model: Key Specs Summary",
-  "specs": "Spec line 1\\nSpec line 2\\nSpec line 3...",
-  "confident": true/false
-}
+Respond ONLY with valid JSON (no markdown, no code blocks):
+{"seoTitle": "Brand Model: Key Specs Summary", "specs": "✅ Spec1: Details\\n✅ Spec2: Details", "confident": true}
 
 Set confident to false if you're unsure about the exact model specifications.`
             }]
@@ -103,51 +110,73 @@ Set confident to false if you're unsure about the exact model specifications.`
     )
 
     if (!geminiResponse.ok) {
-      throw new Error('Gemini API request failed')
-    }
-
-    const geminiData = await geminiResponse.json()
-    if (!geminiData.candidates || geminiData.candidates.length === 0) {
-      throw new Error('No response from AI')
-    }
-
-    const text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-
-    if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0])
-      if (result.specs) {
-        result.specs = result.specs.replace(/\\n/g, '\n')
-      }
-
-      // Optionally update product in database if productId provided
-      if (productId) {
-        await supabaseClient
-          .from('products')
-          .update({
-            seo_title: result.seoTitle,
-            specs: result.specs,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', productId)
-          .eq('user_id', user.id)
-      }
-
+      const errorText = await geminiResponse.text()
+      console.error('Gemini API error:', errorText)
       return new Response(
-        JSON.stringify(result),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Gemini API error: ' + errorText }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    const geminiData = await geminiResponse.json()
+    console.log('Gemini response received')
+
+    if (!geminiData.candidates || geminiData.candidates.length === 0) {
+      console.error('No candidates:', JSON.stringify(geminiData))
+      return new Response(
+        JSON.stringify({ error: 'No response from AI. Check if model is available.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
+    console.log('AI response text:', text.substring(0, 200))
+
+    // Try to extract JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+
+    if (jsonMatch) {
+      try {
+        const result = JSON.parse(jsonMatch[0])
+        if (result.specs) {
+          result.specs = result.specs.replace(/\\n/g, '\n')
+        }
+
+        // Optionally update product in database if productId provided
+        if (productId) {
+          await supabaseClient
+            .from('products')
+            .update({
+              seo_title: result.seoTitle,
+              specs: result.specs,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', productId)
+            .eq('user_id', user.id)
+        }
+
+        return new Response(
+          JSON.stringify(result),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Text:', jsonMatch[0])
+        return new Response(
+          JSON.stringify({ error: 'Failed to parse AI response as JSON', rawResponse: text.substring(0, 500) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Failed to parse AI response' }),
+      JSON.stringify({ error: 'No JSON found in AI response', rawResponse: text.substring(0, 500) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
