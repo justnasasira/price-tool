@@ -78,22 +78,22 @@ serve(async (req) => {
             parts: [{
               text: `Product: "${productName}"
 
-Create SEO title and specs. Be CONCISE - max 8 spec lines.
+Create an SEO title and DETAILED technical specifications.
 
-SEO Title format: "Brand Model: CPU, RAM, Storage, Display"
+SEO Title: "Brand Model: Key specs summary" (e.g., "Dell Optiplex 7020: Intel Core i5, 8GB RAM, 512GB SSD, 20" Monitor")
 
-Specs format (use ✅, keep each line SHORT):
-✅ Processor: Model, speed
-✅ RAM: Size, type
-✅ Storage: Size, type
-✅ Display: Size, resolution (if bundled)
-✅ Graphics: Type
-✅ Ports: Key ports
+Specs: Use ✅ bullets with DETAILED info for each:
+✅ Processor: Full model name, generation, cores, threads, speed, cache
+✅ RAM: Size, type, speed, slots, max expandable
+✅ Storage: Size, type (PCIe NVMe/SATA)
+✅ Graphics: Model name
+✅ Ports: List all USB, video, audio ports with specs
+✅ Bundled Monitor: Size, resolution, panel type, refresh rate (if included)
 ✅ OS: Operating system
 ✅ Warranty: Duration
 
-Respond with JSON only:
-{"seoTitle": "...", "specs": "✅ Line1\\n✅ Line2\\n...", "confident": true/false}`
+Respond with valid JSON only (no markdown):
+{"seoTitle": "Brand Model: specs", "specs": "✅ Processor: details\\n✅ RAM: details\\n...", "confident": true/false}`
             }]
           }],
           generationConfig: {
