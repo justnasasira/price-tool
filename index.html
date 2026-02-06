@@ -1575,15 +1575,18 @@ Example formats supported:
 
     <!-- AI Matching Modal -->
     <div class="modal-overlay hidden" id="aiMatchModal">
-        <div class="modal" style="max-width: 600px;">
+        <div class="modal" style="max-width: 500px;">
             <div class="modal-header">
                 <h2>AI Product Matching</h2>
-                <button class="modal-close" onclick="closeAiMatchModal()">&times;</button>
             </div>
             <div class="modal-body" id="aiMatchModalBody">
-                <div style="text-align: center; padding: 40px;">
-                    <div class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></div>
-                    <p style="margin-top: 16px; color: #6b7280;">Analyzing products with Gemini AI...</p>
+                <div style="text-align: center; padding: 30px;">
+                    <div class="spinner" style="width: 50px; height: 50px; border-width: 4px; margin: 0 auto;"></div>
+                    <p id="aiMatchStatus" style="margin-top: 20px; font-size: 1.1rem; color: #374151; font-weight: 500;">Preparing data...</p>
+                    <p id="aiMatchDetail" style="margin-top: 8px; font-size: 0.9rem; color: #6b7280;">Please wait</p>
+                    <div style="margin-top: 20px; background: #e5e7eb; border-radius: 8px; height: 8px; overflow: hidden;">
+                        <div id="aiMatchProgress" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.3s ease;"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2881,8 +2884,20 @@ Example formats supported:
         }
 
         // AI-powered matching
+        function updateMatchProgress(status, detail, progress) {
+            document.getElementById('aiMatchStatus').textContent = status;
+            document.getElementById('aiMatchDetail').textContent = detail;
+            document.getElementById('aiMatchProgress').style.width = progress + '%';
+        }
+
         async function performAIMatching(newProducts) {
+            // Reset progress bar before showing modal
+            document.getElementById('aiMatchProgress').style.width = '0%';
             document.getElementById('aiMatchModal').classList.remove('hidden');
+
+            // Small delay to ensure reset is visible
+            await new Promise(resolve => setTimeout(resolve, 50));
+            updateMatchProgress('Preparing data...', `${newProducts.length} new products to analyze`, 10);
 
             try {
                 const existingProducts = products.filter(p => p.active).map(p => ({
@@ -2891,6 +2906,8 @@ Example formats supported:
                     category: p.category,
                     basePrice: p.basePrice
                 }));
+
+                updateMatchProgress('Connecting to AI...', `Comparing with ${existingProducts.length} existing products`, 25);
 
                 const newProductsList = newProducts.map(p => ({
                     name: p.name,
@@ -2903,6 +2920,8 @@ Example formats supported:
                 if (!session) {
                     throw new Error('Not authenticated');
                 }
+
+                updateMatchProgress('Analyzing products...', 'AI is comparing product names and prices', 50);
 
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/match-products`, {
                     method: 'POST',
@@ -2923,6 +2942,8 @@ Example formats supported:
                 }
 
                 const aiResult = await response.json();
+
+                updateMatchProgress('Processing results...', 'Categorizing product matches', 75);
 
                 const matches = {
                     exact: [],
@@ -2958,6 +2979,12 @@ Example formats supported:
                 });
 
                 pendingImport = { matches, newProducts };
+
+                updateMatchProgress('Complete!', `Found ${matches.exact.length + matches.likely.length} matches, ${matches.new.length} new products`, 100);
+
+                // Brief delay to show completion before transitioning
+                await new Promise(resolve => setTimeout(resolve, 500));
+
                 closeAiMatchModal();
                 showUpdateModal(matches);
             } catch (error) {
