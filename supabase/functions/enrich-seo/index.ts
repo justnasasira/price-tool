@@ -76,34 +76,29 @@ serve(async (req) => {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are a product data specialist. Given a product name, create an SEO-friendly title and detailed technical specifications.
+              text: `Product: "${productName}"
 
-Product: "${productName}"
+Create SEO title and specs. Be CONCISE - max 8 spec lines.
 
-TASK 1 - SEO Title:
-Create a formatted product title like this:
-"Brand Model: Key Specs Summary"
+SEO Title format: "Brand Model: CPU, RAM, Storage, Display"
 
-Example: "Dell Vostro 3030 MT: Intel Core i5 12th Gen, 8GB RAM, 512GB SSD, 19.5" E2020H Monitor, Ubuntu"
+Specs format (use ✅, keep each line SHORT):
+✅ Processor: Model, speed
+✅ RAM: Size, type
+✅ Storage: Size, type
+✅ Display: Size, resolution (if bundled)
+✅ Graphics: Type
+✅ Ports: Key ports
+✅ OS: Operating system
+✅ Warranty: Duration
 
-TASK 2 - Technical Specifications:
-Create detailed specs using checkmark bullet points (use ✅). Include ALL relevant specifications.
-
-For MONITORS include: Panel type, Resolution, Refresh rate, Response time, Ports, Stand adjustments, VESA mount
-For LAPTOPS include: Processor, RAM, Storage, Display, Graphics, Battery, Weight, Ports, OS, Warranty
-For DESKTOPS include: Processor, RAM, Storage, Graphics, Ports, Bundled monitor specs, OS, Warranty
-
-Look up the ACTUAL specifications for this product from your knowledge.
-
-Respond ONLY with valid JSON (no markdown, no code blocks):
-{"seoTitle": "Brand Model: Key Specs Summary", "specs": "✅ Spec1: Details\\n✅ Spec2: Details", "confident": true}
-
-Set confident to false if you're unsure about the exact model specifications.`
+Respond with JSON only:
+{"seoTitle": "...", "specs": "✅ Line1\\n✅ Line2\\n...", "confident": true/false}`
             }]
           }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 2000
+            maxOutputTokens: 1000
           }
         })
       }
