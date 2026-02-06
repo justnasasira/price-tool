@@ -109,20 +109,31 @@ Return JSON with matches (existing ID to new index), new product indices, and mi
     }
 
     let text = geminiData.candidates[0].content.parts[0].text
+    console.log('AI response:', text.substring(0, 500))
     text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
 
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0])
-      return new Response(
-        JSON.stringify(result),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      try {
+        const result = JSON.parse(jsonMatch[0])
+        return new Response(
+          JSON.stringify(result),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Text:', jsonMatch[0].substring(0, 300))
+        // Return empty result instead of error so UI doesn't break
+        return new Response(
+          JSON.stringify({ matches: [], newProducts: newProducts.map((_: any, i: number) => i), missingIds: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
+    // If no JSON found, treat all as new products
     return new Response(
-      JSON.stringify({ error: 'Failed to parse AI response', matches: [], newProducts: [], missingIds: [] }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ matches: [], newProducts: newProducts.map((_: any, i: number) => i), missingIds: [] }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
