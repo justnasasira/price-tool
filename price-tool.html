@@ -1341,16 +1341,12 @@
             <div class="login-error" id="loginError">Invalid username or password</div>
             <form class="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label for="loginUsername">Username</label>
-                    <input type="text" id="loginUsername" placeholder="Enter username" required autocomplete="username">
+                    <label for="loginUsername">Email</label>
+                    <input type="email" id="loginUsername" placeholder="Enter email" required autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label for="loginPassword">Password</label>
                     <input type="password" id="loginPassword" placeholder="Enter password" required autocomplete="current-password">
-                </div>
-                <div class="remember-me">
-                    <input type="checkbox" id="rememberMe">
-                    <label for="rememberMe">Remember me for 7 days</label>
                 </div>
                 <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
             </form>
@@ -1547,35 +1543,18 @@ Example formats supported:
                     </p>
                 </div>
                 <div class="settings-section">
-                    <h3>Cloud Sync (Supabase)</h3>
-                    <div class="security-notice">
-                        <strong>Security Notice:</strong> Your credentials are stored locally in this browser only. They are never shared or uploaded to any server.
-                    </div>
+                    <h3>Cloud Sync</h3>
                     <div class="cloud-status" id="cloudStatusSettings">
-                        <span class="status-indicator disconnected"></span>
-                        <span id="cloudStatusText">Not connected</span>
+                        <span class="status-indicator connected"></span>
+                        <span id="cloudStatusText">Connected to cloud</span>
                     </div>
-                    <div class="form-group">
-                        <label>Supabase Project URL</label>
-                        <input type="url" id="settingsSupabaseUrl" placeholder="https://your-project.supabase.co" autocomplete="off">
-                    </div>
-                    <div class="form-group">
-                        <label>Supabase Anon Key</label>
-                        <div class="password-input-wrapper">
-                            <input type="password" id="settingsSupabaseKey" placeholder="your-anon-key" autocomplete="off">
-                            <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsSupabaseKey', this)">Show</button>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;">
-                        <button class="btn btn-primary" onclick="testSupabaseConnection()">Test Connection</button>
-                        <button class="btn btn-success" onclick="syncToCloud()">Sync to Cloud</button>
-                        <button class="btn btn-secondary" onclick="loadFromCloud()">Load from Cloud</button>
-                    </div>
-                    <p style="font-size: 0.8rem; color: #6b7280; margin-top: 12px;">
-                        Create tables in Supabase SQL Editor:<br>
-                        <code style="font-size: 0.75rem; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">products</code> (id, data, user_id, updated_at) and
-                        <code style="font-size: 0.75rem; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">settings</code> (id, data, user_id, updated_at)
+                    <p style="font-size: 0.85rem; color: #6b7280; margin-top: 8px;">
+                        Your data is automatically synced to the cloud. You can access it from any device by logging in with your account.
                     </p>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;">
+                        <button class="btn btn-success" onclick="syncToCloud()">Sync Now</button>
+                        <button class="btn btn-secondary" onclick="loadFromCloud()">Reload from Cloud</button>
+                    </div>
                 </div>
                 <div class="settings-section">
                     <h3>Local Data Management</h3>
@@ -1615,38 +1594,48 @@ Example formats supported:
 
     <script>
         // =====================
-        // Authentication
+        // SUPABASE CONFIGURATION
         // =====================
-        // SHA-256 hash of "mugisha1478" - computed via Web Crypto API
-        const AUTH_USERNAME = 'justus';
-        const AUTH_PASSWORD_HASH = 'e59f8b3c5a2d4e8f7c3b1a9d6e2f4c8b7a5d3e1f9c7b5a3d1e9f7c5b3a1d9e7f'; // Will be computed on first load
-        let isAuthenticated = false;
+        const SUPABASE_URL = 'https://tflweplhibgehesebdjk.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmbHdlcGxoaWJnZWhlc2ViZGprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzOTk3MTgsImV4cCI6MjA4NTk3NTcxOH0.qY93vmQ_yrKg1Nk8DBFR82x34XKTHP11WNkuh5nDSF8';
 
-        // Compute SHA-256 hash
-        async function sha256(message) {
-            const msgBuffer = new TextEncoder().encode(message);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        // =====================
+        // Supabase Auth Integration
+        // =====================
+        let supabaseClient = null;
+        let currentUser = null;
+
+        function initSupabaseAuth() {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            // Listen for auth state changes
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+                console.log('Auth state changed:', event);
+                if (session) {
+                    currentUser = session.user;
+                    hideLoginOverlay();
+                    loadFromSupabase().then(() => {
+                        renderProducts();
+                        updateCategoryFilter();
+                        document.getElementById('exchangeRateInput').value = settings.exchangeRate;
+                        updateSyncStatus('connected');
+                    });
+                } else {
+                    currentUser = null;
+                    showLoginOverlay();
+                    updateSyncStatus('disconnected');
+                }
+            });
         }
 
         // Check if user is authenticated
         async function checkAuth() {
-            const session = localStorage.getItem('priceTool_session');
+            const { data: { session } } = await supabaseClient.auth.getSession();
             if (session) {
-                try {
-                    const sessionData = JSON.parse(session);
-                    const now = Date.now();
-                    if (sessionData.expires > now && sessionData.user === AUTH_USERNAME) {
-                        isAuthenticated = true;
-                        hideLoginOverlay();
-                        return true;
-                    }
-                } catch (e) {
-                    console.error('Session parse error:', e);
-                }
+                currentUser = session.user;
+                hideLoginOverlay();
+                return true;
             }
-            isAuthenticated = false;
             showLoginOverlay();
             return false;
         }
@@ -1661,51 +1650,37 @@ Example formats supported:
             loginBtn.textContent = 'Signing in...';
             errorDiv.classList.remove('show');
 
-            const username = document.getElementById('loginUsername').value.trim();
+            const email = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
-            const rememberMe = document.getElementById('rememberMe').checked;
 
-            // Hash the entered password
-            const passwordHash = await sha256(password);
-            // Expected hash for "mugisha1478"
-            const expectedHash = await sha256('mugisha1478');
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
 
-            // Check credentials
-            if (username === AUTH_USERNAME && passwordHash === expectedHash) {
-                // Success - create session
-                const expiryDays = rememberMe ? 7 : 1;
-                const session = {
-                    user: username,
-                    expires: Date.now() + (expiryDays * 24 * 60 * 60 * 1000),
-                    created: Date.now()
-                };
-                localStorage.setItem('priceTool_session', JSON.stringify(session));
-                isAuthenticated = true;
-                hideLoginOverlay();
-                init(); // Initialize the app
-            } else {
-                // Failed
+            if (error) {
+                errorDiv.textContent = error.message;
                 errorDiv.classList.add('show');
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Sign In';
-
-                // Clear password field
                 document.getElementById('loginPassword').value = '';
-                document.getElementById('loginPassword').focus();
+                return;
             }
+
+            // Success - auth state change listener will handle the rest
+            loginBtn.textContent = 'Sign In';
+            loginBtn.disabled = false;
         }
 
         // Handle logout
-        function handleLogout() {
+        async function handleLogout() {
             if (confirm('Are you sure you want to sign out?')) {
-                localStorage.removeItem('priceTool_session');
-                isAuthenticated = false;
+                await supabaseClient.auth.signOut();
+                currentUser = null;
+                products = [];
                 showLoginOverlay();
-
-                // Clear login form
                 document.getElementById('loginUsername').value = '';
                 document.getElementById('loginPassword').value = '';
-                document.getElementById('rememberMe').checked = false;
             }
         }
 
@@ -1729,17 +1704,14 @@ Example formats supported:
         // Data Store
         // =====================
         let products = [];
-        // SECURITY: All sensitive credentials are stored in localStorage only
-        // Never hardcode API keys or credentials in source code
+        // Settings stored in Supabase user_settings table
         let settings = {
             exchangeRate: 3750,
             geminiApiKey: '',
             geminiModel: 'gemini-2.5-flash',
             vatRate: 0.18,
             markupRate: 0.30,
-            itemsPerPage: 10,
-            supabaseUrl: '',
-            supabaseKey: ''
+            itemsPerPage: 10
         };
 
         const AVAILABLE_MODELS = [
@@ -1756,17 +1728,8 @@ Example formats supported:
         // =====================
         // Initialization
         // =====================
+        // Legacy function - now handled by auth state change listener
         function init() {
-            loadFromStorage();
-
-            // Initialize Supabase (non-blocking)
-            try {
-                initSupabase();
-            } catch (error) {
-                console.error('Supabase init error:', error);
-                updateSyncStatus('disconnected');
-            }
-
             renderProducts();
             updateCategoryFilter();
 
@@ -1776,32 +1739,9 @@ Example formats supported:
             }
         }
 
-        function loadFromStorage() {
-            try {
-                const savedProducts = localStorage.getItem('priceTool_products');
-                const savedSettings = localStorage.getItem('priceTool_settings');
-
-                if (savedProducts) {
-                    products = JSON.parse(savedProducts);
-                }
-                if (savedSettings) {
-                    settings = { ...settings, ...JSON.parse(savedSettings) };
-                }
-            } catch (error) {
-                console.error('Error loading from storage:', error);
-            }
-        }
-
         function saveToStorage() {
-            try {
-                localStorage.setItem('priceTool_products', JSON.stringify(products));
-                localStorage.setItem('priceTool_settings', JSON.stringify(settings));
-            } catch (error) {
-                console.error('Failed to save to localStorage:', error);
-            }
-
-            // Auto-sync to cloud if connected
-            if (supabaseClient && syncStatus === 'connected') {
+            // Auto-sync to cloud (always connected after login)
+            if (supabaseClient && currentUser) {
                 debouncedCloudSync();
             }
         }
@@ -1818,25 +1758,10 @@ Example formats supported:
         // =====================
         // Supabase Integration
         // =====================
+        // Legacy function - now handled by initSupabaseAuth
         function initSupabase() {
-            // Check if Supabase library is loaded
-            if (typeof window.supabase === 'undefined') {
-                console.warn('Supabase library not loaded. Cloud sync unavailable.');
-                updateSyncStatus('disconnected');
-                return;
-            }
-
-            if (settings.supabaseUrl && settings.supabaseKey) {
-                try {
-                    supabaseClient = window.supabase.createClient(settings.supabaseUrl, settings.supabaseKey);
-                    testSupabaseConnection(true); // silent test
-                } catch (error) {
-                    console.error('Failed to initialize Supabase:', error);
-                    updateSyncStatus('error');
-                }
-            } else {
-                updateSyncStatus('disconnected');
-            }
+            // Supabase is now auto-initialized via initSupabaseAuth
+            console.log('Supabase initialized via auth system');
         }
 
         function updateSyncStatus(status, message) {
@@ -1870,86 +1795,142 @@ Example formats supported:
             }
         }
 
+        // Legacy function - connection is now automatic
         async function testSupabaseConnection(silent = false) {
-            // Check if Supabase library is loaded
-            if (typeof window.supabase === 'undefined') {
-                if (!silent) showToast('Supabase library not loaded. Try refreshing the page.', 'error');
-                updateSyncStatus('disconnected');
-                return false;
-            }
-
-            const url = document.getElementById('settingsSupabaseUrl')?.value || settings.supabaseUrl;
-            const key = document.getElementById('settingsSupabaseKey')?.value || settings.supabaseKey;
-
-            if (!url || !key) {
-                if (!silent) showToast('Please enter Supabase URL and Key', 'error');
-                updateSyncStatus('disconnected');
-                return false;
-            }
-
-            try {
-                updateSyncStatus('syncing');
-
-                // Create or update client
-                supabaseClient = window.supabase.createClient(url, key);
-
-                // Test connection by querying the products table
-                const { data, error } = await supabaseClient.from('products').select('id').limit(1);
-
-                if (error) {
-                    throw error;
-                }
-
+            if (supabaseClient && currentUser) {
                 updateSyncStatus('connected');
-                if (!silent) showToast('Connected to Supabase successfully!', 'success');
+                if (!silent) showToast('Connected to cloud', 'success');
                 return true;
-            } catch (error) {
-                console.error('Supabase connection error:', error);
-                updateSyncStatus('error', error.message);
-                if (!silent) showToast('Connection failed: ' + error.message, 'error');
-                return false;
             }
+            updateSyncStatus('disconnected');
+            if (!silent) showToast('Please log in to connect', 'error');
+            return false;
         }
 
-        async function syncToCloud(silent = false) {
-            if (!supabaseClient || typeof window.supabase === 'undefined') {
-                if (!silent) showToast('Cloud sync not available. Check your connection.', 'error');
+        // Load data from Supabase (called on login)
+        async function loadFromSupabase() {
+            if (!supabaseClient || !currentUser) {
                 return;
             }
 
             try {
                 updateSyncStatus('syncing');
 
-                // Get user ID (use a device ID for simplicity, or implement auth)
-                const userId = getDeviceId();
+                // Load user settings
+                const { data: settingsData, error: settingsError } = await supabaseClient
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .single();
 
-                // Sync products
-                const { error: productsError } = await supabaseClient
+                if (settingsError && settingsError.code !== 'PGRST116') {
+                    console.error('Settings load error:', settingsError);
+                }
+
+                if (settingsData) {
+                    settings = {
+                        exchangeRate: parseFloat(settingsData.exchange_rate) || 3750,
+                        vatRate: parseFloat(settingsData.vat_rate) || 0.18,
+                        markupRate: parseFloat(settingsData.markup_rate) || 0.30,
+                        geminiModel: settingsData.gemini_model || 'gemini-2.5-flash',
+                        itemsPerPage: settingsData.items_per_page || 10,
+                        geminiApiKey: settingsData.gemini_api_key || ''
+                    };
+                }
+
+                // Load products
+                const { data: productsData, error: productsError } = await supabaseClient
                     .from('products')
-                    .upsert({
-                        id: userId,
-                        data: products,
-                        user_id: userId,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
+                    .select('*')
+                    .eq('user_id', currentUser.id);
 
-                if (productsError) throw productsError;
+                if (productsError) {
+                    console.error('Products load error:', productsError);
+                }
 
-                // Sync settings (without sensitive keys for security)
-                const settingsToSync = { ...settings };
-                delete settingsToSync.supabaseKey; // Don't sync the key itself
-                delete settingsToSync.geminiApiKey; // Don't sync API keys
+                if (productsData && productsData.length > 0) {
+                    products = productsData.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        sku: p.sku || '',
+                        category: p.category || '',
+                        basePrice: parseFloat(p.base_price) || 0,
+                        vatIncluded: p.vat_included || false,
+                        monthTag: p.month_tag || '',
+                        inStock: p.in_stock !== false,
+                        active: p.active !== false,
+                        seoTitle: p.seo_title || '',
+                        specs: p.specs || '',
+                        createdAt: new Date(p.created_at).getTime(),
+                        updatedAt: new Date(p.updated_at).getTime()
+                    }));
+                } else {
+                    products = [];
+                }
 
+                updateSyncStatus('connected');
+                console.log(`Loaded ${products.length} products from cloud`);
+            } catch (error) {
+                console.error('Load from Supabase error:', error);
+                updateSyncStatus('error', error.message);
+            }
+        }
+
+        async function syncToCloud(silent = false) {
+            if (!supabaseClient || !currentUser) {
+                if (!silent) showToast('Please log in to sync to cloud.', 'error');
+                return;
+            }
+
+            try {
+                updateSyncStatus('syncing');
+
+                // Sync user settings (including Gemini API key - stored securely server-side)
                 const { error: settingsError } = await supabaseClient
-                    .from('settings')
+                    .from('user_settings')
                     .upsert({
-                        id: userId,
-                        data: settingsToSync,
-                        user_id: userId,
+                        user_id: currentUser.id,
+                        exchange_rate: settings.exchangeRate,
+                        vat_rate: settings.vatRate,
+                        markup_rate: settings.markupRate,
+                        gemini_api_key: settings.geminiApiKey,
+                        gemini_model: settings.geminiModel,
+                        items_per_page: settings.itemsPerPage,
                         updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
+                    }, { onConflict: 'user_id' });
 
                 if (settingsError) throw settingsError;
+
+                // Sync products - delete existing and insert new
+                const { error: deleteError } = await supabaseClient
+                    .from('products')
+                    .delete()
+                    .eq('user_id', currentUser.id);
+
+                if (deleteError) throw deleteError;
+
+                if (products.length > 0) {
+                    const productsToInsert = products.map(p => ({
+                        id: p.id,
+                        user_id: currentUser.id,
+                        name: p.name,
+                        sku: p.sku || '',
+                        category: p.category || '',
+                        base_price: p.basePrice,
+                        vat_included: p.vatIncluded || false,
+                        month_tag: p.monthTag || '',
+                        in_stock: p.inStock !== false,
+                        active: p.active !== false,
+                        seo_title: p.seoTitle || '',
+                        specs: p.specs || ''
+                    }));
+
+                    const { error: insertError } = await supabaseClient
+                        .from('products')
+                        .insert(productsToInsert);
+
+                    if (insertError) throw insertError;
+                }
 
                 updateSyncStatus('connected');
                 if (!silent) showToast(`Synced ${products.length} products to cloud`, 'success');
@@ -1961,78 +1942,16 @@ Example formats supported:
         }
 
         async function loadFromCloud() {
-            if (!supabaseClient || typeof window.supabase === 'undefined') {
-                showToast('Cloud sync not available. Check your connection.', 'error');
+            if (!supabaseClient || !currentUser) {
+                showToast('Please log in to load from cloud.', 'error');
                 return;
             }
 
-            try {
-                updateSyncStatus('syncing');
-
-                const userId = getDeviceId();
-
-                // Load products
-                const { data: productsData, error: productsError } = await supabaseClient
-                    .from('products')
-                    .select('data')
-                    .eq('id', userId)
-                    .single();
-
-                if (productsError && productsError.code !== 'PGRST116') {
-                    throw productsError;
-                }
-
-                // Load settings
-                const { data: settingsData, error: settingsError } = await supabaseClient
-                    .from('settings')
-                    .select('data')
-                    .eq('id', userId)
-                    .single();
-
-                if (settingsError && settingsError.code !== 'PGRST116') {
-                    throw settingsError;
-                }
-
-                // Apply loaded data
-                if (productsData?.data) {
-                    products = productsData.data;
-                }
-
-                if (settingsData?.data) {
-                    // Merge settings but keep local API keys
-                    const localKeys = {
-                        supabaseUrl: settings.supabaseUrl,
-                        supabaseKey: settings.supabaseKey,
-                        geminiApiKey: settings.geminiApiKey
-                    };
-                    settings = { ...settings, ...settingsData.data, ...localKeys };
-                }
-
-                // Save to local storage
-                localStorage.setItem('priceTool_products', JSON.stringify(products));
-                localStorage.setItem('priceTool_settings', JSON.stringify(settings));
-
-                // Update UI
-                document.getElementById('exchangeRateInput').value = settings.exchangeRate;
-                updateCategoryFilter();
-                renderProducts();
-
-                updateSyncStatus('connected');
-                showToast(`Loaded ${products.length} products from cloud`, 'success');
-            } catch (error) {
-                console.error('Load from cloud error:', error);
-                updateSyncStatus('error', error.message);
-                showToast('Failed to load: ' + error.message, 'error');
-            }
-        }
-
-        function getDeviceId() {
-            let deviceId = localStorage.getItem('priceTool_deviceId');
-            if (!deviceId) {
-                deviceId = 'device_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('priceTool_deviceId', deviceId);
-            }
-            return deviceId;
+            await loadFromSupabase();
+            renderProducts();
+            updateCategoryFilter();
+            document.getElementById('exchangeRateInput').value = settings.exchangeRate;
+            showToast(`Loaded ${products.length} products from cloud`, 'success');
         }
 
         // =====================
@@ -2653,88 +2572,28 @@ Example formats supported:
             }
         }
 
-        async function enrichProductWithAI(productName) {
-            const model = settings.geminiModel || 'gemini-2.5-flash';
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiApiKey}`, {
+        async function enrichProductWithAI(productName, productId = null) {
+            // Use Edge Function for secure AI call
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) {
+                throw new Error('Not authenticated');
+            }
+
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/enrich-seo`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: `You are a product data specialist. Given a product name, create an SEO-friendly title and detailed technical specifications.
-
-Product: "${productName}"
-
-TASK 1 - SEO Title:
-Create a formatted product title like this:
-"Brand Model: Key Specs Summary"
-
-Example: "Dell Vostro 3030 MT: Intel Core i5 12th Gen, 8GB RAM, 512GB SSD, 19.5" E2020H Monitor, Ubuntu"
-
-TASK 2 - Technical Specifications:
-Create detailed specs using ✅ bullet points. Include ALL relevant specifications:
-
-Example format:
-✅ Processor: Intel Core i5 12th Gen (up to 4.4GHz, Intel Smart Cache, multi-core performance)
-✅ Graphics: Integrated Intel UHD Graphics 730
-✅ Memory: 8GB DDR4-3200 RAM (expandable up to 64GB, dual DIMM slots)
-✅ Storage: 512GB PCIe NVMe SSD
-✅ Display: Dell 19.5" E2020H Monitor (1600x900, Anti-glare, 60Hz, VGA + DisplayPort)
-✅ Operating System: Ubuntu Linux
-✅ Connectivity: Gigabit Ethernet, HDMI, VGA, USB ports (USB-A 3.2 & 2.0)
-✅ Keyboard & Mouse: Dell Wired Keyboard + Wired Optical Mouse
-✅ Chassis: Mini Tower (MT), compact design
-✅ Power Supply: 180W (efficient PSU)
-✅ Warranty: 1 Year Manufacturer's Warranty
-✅ Color: Black
-
-For MONITORS include: Panel type, Resolution, Refresh rate, Response time, Ports, Stand adjustments, VESA mount
-For LAPTOPS include: Processor, RAM, Storage, Display, Graphics, Battery, Weight, Ports, OS, Warranty
-For DESKTOPS include: Processor, RAM, Storage, Graphics, Ports, Bundled monitor specs, OS, Warranty
-
-Look up the ACTUAL specifications for this product from your knowledge.
-
-Respond in JSON format:
-{
-  "seoTitle": "Brand Model: Key Specs Summary",
-  "specs": "✅ Spec1: Details\\n✅ Spec2: Details\\n✅ Spec3: Details...",
-  "confident": true/false
-}
-
-IMPORTANT: In the specs field, use \\n for line breaks between each ✅ item.
-Set confident to false if you're unsure about the exact model specifications.`
-                        }]
-                    }],
-                    generationConfig: {
-                        temperature: 0.2,
-                        maxOutputTokens: 2000
-                    }
-                })
+                body: JSON.stringify({ productName, productId })
             });
 
             if (!response.ok) {
-                throw new Error('API request failed');
+                const error = await response.json();
+                throw new Error(error.error || 'SEO enrichment failed');
             }
 
-            const data = await response.json();
-            if (!data.candidates || data.candidates.length === 0) {
-                throw new Error('No response from AI');
-            }
-
-            const text = data.candidates[0].content.parts.map(p => p.text || '').join('');
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-            if (jsonMatch) {
-                const result = JSON.parse(jsonMatch[0]);
-                // Convert escaped newlines to actual newlines
-                if (result.specs) {
-                    result.specs = result.specs.replace(/\\n/g, '\n');
-                }
-                return result;
-            }
-            return null;
+            return await response.json();
         }
 
         // =====================
@@ -2823,90 +2682,34 @@ Set confident to false if you're unsure about the exact model specifications.`
         }
 
         async function formatWithAI(rawText) {
-            const model = settings.geminiModel || 'gemini-2.5-flash';
-            console.log('Using model:', model);
+            // Use Edge Function for secure AI call
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) {
+                throw new Error('Not authenticated');
+            }
+
+            console.log('Calling format-pricelist Edge Function...');
             console.log('Input length:', rawText.length);
 
-            const requestBody = {
-                contents: [{
-                    parts: [{
-                        text: `Convert this price list to a clean format. Include ALL items.
-
-FORMAT:
-- First line: month/year (e.g., FEB 2026)
-- Category headers in ALL CAPS on own line
-- Product name on one line (combine multi-line descriptions, include SKU codes)
-- Price on next line as @NUMBER+
-- Remove asterisks, line numbers, bullets
-
-Example output:
-FEB 2026
-DESKTOPS
-
-HP PRO TOWER 290 G9 CI3 14100 8GB 512GB 21.5" #C6QM6AT
-@460+
-
-Dell Optiplex 7020 Ci5 14th gen 8GB 512GB 20" E2020H
-@580+
-
-DATA TO FORMAT:
-${rawText}
-
-Output ONLY the formatted list. Include ALL products.`
-                    }]
-                }],
-                generationConfig: {
-                    temperature: 0.1,
-                    maxOutputTokens: 65536
-                }
-            };
-
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiApiKey}`, {
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/format-pricelist`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({ rawText })
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('API Error:', errorText);
-                throw new Error('API request failed: ' + errorText);
+                const error = await response.json();
+                console.error('Edge Function Error:', error);
+                throw new Error(error.error || 'AI formatting failed');
             }
 
             const data = await response.json();
-            console.log('Full API response:', JSON.stringify(data, null, 2));
+            console.log('Response text length:', data.formattedText?.length);
 
-            // Check for different response structures
-            if (!data.candidates || data.candidates.length === 0) {
-                console.error('No candidates in response:', data);
-                throw new Error('No response from AI');
-            }
-
-            const candidate = data.candidates[0];
-
-            // Check finish reason
-            if (candidate.finishReason) {
-                console.log('Finish reason:', candidate.finishReason);
-            }
-
-            // Get text from response
-            let text = '';
-            if (candidate.content && candidate.content.parts) {
-                text = candidate.content.parts.map(p => p.text || '').join('');
-            }
-
-            console.log('Response text length:', text.length);
-            console.log('Response preview:', text.substring(0, 500));
-
-            // Clean up the response - remove any markdown code blocks if present
-            let cleaned = text
-                .replace(/```[\w]*\n?/g, '')
-                .replace(/```/g, '')
-                .trim();
-
-            return cleaned;
+            return data.formattedText;
         }
 
         function showFormattedPreview(formatted) {
@@ -3329,8 +3132,6 @@ Respond with JSON:
             document.getElementById('settingsMarkupRate').value = settings.markupRate * 100;
             document.getElementById('settingsGeminiKey').value = settings.geminiApiKey || '';
             document.getElementById('settingsGeminiModel').value = settings.geminiModel || 'gemini-2.5-flash';
-            document.getElementById('settingsSupabaseUrl').value = settings.supabaseUrl || '';
-            document.getElementById('settingsSupabaseKey').value = settings.supabaseKey || '';
             document.getElementById('settingsModal').classList.remove('hidden');
 
             // Update sync status display
@@ -3341,30 +3142,21 @@ Respond with JSON:
             document.getElementById('settingsModal').classList.add('hidden');
         }
 
-        function saveSettings() {
+        async function saveSettings() {
             settings.exchangeRate = parseFloat(document.getElementById('settingsExchangeRate').value) || 3750;
             settings.vatRate = (parseFloat(document.getElementById('settingsVatRate').value) || 18) / 100;
             settings.markupRate = (parseFloat(document.getElementById('settingsMarkupRate').value) || 30) / 100;
             settings.geminiApiKey = document.getElementById('settingsGeminiKey').value.trim();
             settings.geminiModel = document.getElementById('settingsGeminiModel').value || 'gemini-2.5-flash';
 
-            // Supabase settings
-            const newSupabaseUrl = document.getElementById('settingsSupabaseUrl').value.trim();
-            const newSupabaseKey = document.getElementById('settingsSupabaseKey').value.trim();
-
-            // Reinitialize Supabase if credentials changed
-            if (newSupabaseUrl !== settings.supabaseUrl || newSupabaseKey !== settings.supabaseKey) {
-                settings.supabaseUrl = newSupabaseUrl;
-                settings.supabaseKey = newSupabaseKey;
-                initSupabase();
-            }
-
             document.getElementById('exchangeRateInput').value = settings.exchangeRate;
 
-            saveToStorage();
+            // Save to Supabase
+            await syncToCloud(true);
+
             renderProducts();
             closeSettingsModal();
-            showToast('Settings saved', 'success');
+            showToast('Settings saved to cloud', 'success');
         }
 
         // =====================
@@ -3485,23 +3277,11 @@ Respond with JSON:
         // Initialize
         // =====================
         document.addEventListener('DOMContentLoaded', async () => {
-            // Check authentication first
-            const authenticated = await checkAuth();
+            // Initialize Supabase Auth first
+            initSupabaseAuth();
 
-            if (authenticated) {
-                try {
-                    init();
-                } catch (error) {
-                    console.error('Initialization error:', error);
-                    // Try to at least render the UI
-                    try {
-                        renderProducts();
-                        updateCategoryFilter();
-                    } catch (e) {
-                        console.error('UI render error:', e);
-                    }
-                }
-            }
+            // Check if already authenticated (auth state change listener will handle the rest)
+            await checkAuth();
 
             // Set up AI format checkbox listener
             const aiFormatCheckbox = document.getElementById('useAiFormat');
