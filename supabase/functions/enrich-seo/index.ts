@@ -140,7 +140,14 @@ Set confident to false if you're unsure about the exact model specifications.`
 
     if (jsonMatch) {
       try {
-        const result = JSON.parse(jsonMatch[0])
+        // Fix unescaped newlines in JSON string values
+        let jsonStr = jsonMatch[0]
+        // Replace actual newlines within strings with escaped newlines
+        jsonStr = jsonStr.replace(/("(?:[^"\\]|\\.)*")/g, (match) => {
+          return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+        })
+
+        const result = JSON.parse(jsonStr)
         if (result.specs) {
           result.specs = result.specs.replace(/\\n/g, '\n')
         }
