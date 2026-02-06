@@ -101,10 +101,18 @@ Return JSON with matches (existing ID to new index), new product indices, and mi
     }
 
     const geminiData = await geminiResponse.json()
+    console.log('Gemini response:', JSON.stringify(geminiData).substring(0, 500))
+
     if (!geminiData.candidates?.[0]?.content?.parts?.[0]?.text) {
+      console.log('No candidates, falling back to simple matching')
+      // Fall back gracefully - treat all as new products
       return new Response(
-        JSON.stringify({ error: 'No AI response' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          matches: [],
+          newProducts: newProducts.map((_: any, i: number) => i),
+          missingIds: existingProducts.map((p: any) => p.id)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
