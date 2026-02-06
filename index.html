@@ -1606,38 +1606,67 @@ Example formats supported:
         let currentUser = null;
 
         function initSupabaseAuth() {
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-            // Listen for auth state changes
-            supabaseClient.auth.onAuthStateChange((event, session) => {
-                console.log('Auth state changed:', event);
-                if (session) {
-                    currentUser = session.user;
-                    hideLoginOverlay();
-                    loadFromSupabase().then(() => {
-                        renderProducts();
-                        updateCategoryFilter();
-                        document.getElementById('exchangeRateInput').value = settings.exchangeRate;
-                        updateSyncStatus('connected');
-                    });
-                } else {
-                    currentUser = null;
-                    showLoginOverlay();
-                    updateSyncStatus('disconnected');
+            try {
+                if (typeof window.supabase === 'undefined') {
+                    console.error('Supabase library not loaded');
+                    return;
                 }
-            });
+
+                console.log('Initializing Supabase client...');
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('Supabase client created');
+
+                // Listen for auth state changes
+                supabaseClient.auth.onAuthStateChange((event, session) => {
+                    console.log('Auth state changed:', event, session?.user?.email);
+                    if (session) {
+                        currentUser = session.user;
+                        hideLoginOverlay();
+                        loadFromSupabase().then(() => {
+                            renderProducts();
+                            updateCategoryFilter();
+                            document.getElementById('exchangeRateInput').value = settings.exchangeRate;
+                            updateSyncStatus('connected');
+                        }).catch(err => {
+                            console.error('Load from Supabase error:', err);
+                        });
+                    } else {
+                        currentUser = null;
+                        showLoginOverlay();
+                        updateSyncStatus('disconnected');
+                    }
+                });
+            } catch (err) {
+                console.error('initSupabaseAuth error:', err);
+            }
         }
 
         // Check if user is authenticated
         async function checkAuth() {
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                hideLoginOverlay();
-                return true;
+            try {
+                if (!supabaseClient) {
+                    console.error('Supabase client not initialized');
+                    showLoginOverlay();
+                    return false;
+                }
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                if (error) {
+                    console.error('Get session error:', error);
+                    showLoginOverlay();
+                    return false;
+                }
+                if (session) {
+                    currentUser = session.user;
+                    hideLoginOverlay();
+                    return true;
+                }
+                showLoginOverlay();
+                return false;
+            } catch (err) {
+                console.error('checkAuth error:', err);
+                showLoginOverlay();
+                return false;
             }
-            showLoginOverlay();
-            return false;
         }
 
         // Handle login form submission
@@ -1650,26 +1679,42 @@ Example formats supported:
             loginBtn.textContent = 'Signing in...';
             errorDiv.classList.remove('show');
 
-            const email = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value;
+            try {
+                if (!supabaseClient) {
+                    throw new Error('Connection not ready. Please refresh the page.');
+                }
 
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password
-            });
+                const email = document.getElementById('loginUsername').value.trim();
+                const password = document.getElementById('loginPassword').value;
 
-            if (error) {
-                errorDiv.textContent = error.message;
+                console.log('Attempting login for:', email);
+
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) {
+                    console.error('Login error:', error);
+                    errorDiv.textContent = error.message;
+                    errorDiv.classList.add('show');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Sign In';
+                    document.getElementById('loginPassword').value = '';
+                    return;
+                }
+
+                console.log('Login successful:', data.user?.email);
+                // Success - auth state change listener will handle the rest
+                loginBtn.textContent = 'Sign In';
+                loginBtn.disabled = false;
+            } catch (err) {
+                console.error('Login exception:', err);
+                errorDiv.textContent = err.message || 'Login failed. Please try again.';
                 errorDiv.classList.add('show');
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Sign In';
-                document.getElementById('loginPassword').value = '';
-                return;
             }
-
-            // Success - auth state change listener will handle the rest
-            loginBtn.textContent = 'Sign In';
-            loginBtn.disabled = false;
         }
 
         // Handle logout
