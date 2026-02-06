@@ -98,7 +98,7 @@ Respond with JSON only:
           }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 1000
+            maxOutputTokens: 4096
           }
         })
       }
@@ -114,17 +114,23 @@ Respond with JSON only:
     }
 
     const geminiData = await geminiResponse.json()
-    console.log('Gemini response received')
+    console.log('Gemini full response:', JSON.stringify(geminiData).substring(0, 1000))
 
     if (!geminiData.candidates || geminiData.candidates.length === 0) {
       console.error('No candidates:', JSON.stringify(geminiData))
       return new Response(
-        JSON.stringify({ error: 'No response from AI. Check if model is available.' }),
+        JSON.stringify({ error: 'No response from AI. Check if model is available.', details: geminiData }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    let text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
+    const candidate = geminiData.candidates[0]
+    console.log('Finish reason:', candidate.finishReason)
+    if (candidate.safetyRatings) {
+      console.log('Safety ratings:', JSON.stringify(candidate.safetyRatings))
+    }
+
+    let text = candidate.content?.parts?.map((p: any) => p.text || '').join('') || ''
     console.log('AI response length:', text.length)
     console.log('AI response preview:', text.substring(0, 300))
     console.log('Has closing brace:', text.includes('}'))
@@ -223,7 +229,12 @@ Respond with JSON only:
     }
 
     return new Response(
-      JSON.stringify({ error: 'No JSON found in AI response', rawResponse: text.substring(0, 500), textLength: text.length }),
+      JSON.stringify({
+        error: 'No JSON found in AI response',
+        rawResponse: text.substring(0, 500),
+        textLength: text.length,
+        finishReason: geminiData.candidates?.[0]?.finishReason || 'unknown'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
