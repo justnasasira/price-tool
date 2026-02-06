@@ -991,6 +991,42 @@
             color: #374151;
         }
 
+        /* Security notice */
+        .security-notice {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            color: #92400e;
+            margin-bottom: 16px;
+        }
+
+        /* Password input with toggle */
+        .password-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+
+        .password-input-wrapper input {
+            flex: 1;
+        }
+
+        .toggle-visibility-btn {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            color: #6b7280;
+            white-space: nowrap;
+        }
+
+        .toggle-visibility-btn:hover {
+            background: #f3f4f6;
+        }
+
         /* Month tag badge */
         .month-tag {
             display: inline-block;
@@ -1343,7 +1379,10 @@ Example formats supported:
                     <h3>Gemini API (for AI Features)</h3>
                     <div class="form-group">
                         <label>API Key</label>
-                        <input type="password" id="settingsGeminiKey" placeholder="Enter your Gemini API key">
+                        <div class="password-input-wrapper">
+                            <input type="password" id="settingsGeminiKey" placeholder="Enter your Gemini API key" autocomplete="off">
+                            <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsGeminiKey', this)">Show</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Model</label>
@@ -1359,17 +1398,23 @@ Example formats supported:
                 </div>
                 <div class="settings-section">
                     <h3>Cloud Sync (Supabase)</h3>
+                    <div class="security-notice">
+                        <strong>Security Notice:</strong> Your credentials are stored locally in this browser only. They are never shared or uploaded to any server.
+                    </div>
                     <div class="cloud-status" id="cloudStatusSettings">
                         <span class="status-indicator disconnected"></span>
                         <span id="cloudStatusText">Not connected</span>
                     </div>
                     <div class="form-group">
                         <label>Supabase Project URL</label>
-                        <input type="text" id="settingsSupabaseUrl" placeholder="https://your-project.supabase.co">
+                        <input type="url" id="settingsSupabaseUrl" placeholder="https://your-project.supabase.co" autocomplete="off">
                     </div>
                     <div class="form-group">
                         <label>Supabase Anon Key</label>
-                        <input type="password" id="settingsSupabaseKey" placeholder="your-anon-key">
+                        <div class="password-input-wrapper">
+                            <input type="password" id="settingsSupabaseKey" placeholder="your-anon-key" autocomplete="off">
+                            <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsSupabaseKey', this)">Show</button>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;">
                         <button class="btn btn-primary" onclick="testSupabaseConnection()">Test Connection</button>
@@ -1423,6 +1468,8 @@ Example formats supported:
         // Data Store
         // =====================
         let products = [];
+        // SECURITY: All sensitive credentials are stored in localStorage only
+        // Never hardcode API keys or credentials in source code
         let settings = {
             exchangeRate: 3750,
             geminiApiKey: '',
@@ -1430,8 +1477,8 @@ Example formats supported:
             vatRate: 0.18,
             markupRate: 0.30,
             itemsPerPage: 10,
-            supabaseUrl: 'https://tflweplhibgehesebdjk.supabase.co',
-            supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmbHdlcGxoaWJnZWhlc2ViZGprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzOTk3MTgsImV4cCI6MjA4NTk3NTcxOH0.qY93vmQ_yrKg1Nk8DBFR82x34XKTHP11WNkuh5nDSF8'
+            supabaseUrl: '',
+            supabaseKey: ''
         };
 
         const AVAILABLE_MODELS = [
@@ -3157,6 +3204,20 @@ Respond with JSON:
                 toast.style.transform = 'translateX(100%)';
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
+        }
+
+        // =====================
+        // Security Utilities
+        // =====================
+        function togglePasswordVisibility(inputId, button) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                button.textContent = 'Show';
+            }
         }
 
         // =====================
