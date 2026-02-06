@@ -2043,9 +2043,11 @@ Example formats supported:
 
             // Patterns
             const monthPattern = /^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4}$/i;
-            const categoryPattern = /^[A-Z][A-Z\s&]+$/;
+            const categoryPattern = /^[A-Z][A-Z0-9\s&]+$/;  // Allow numbers like I5, I7
             const pricePattern = /^@\s*(\d+(?:\.\d+)?)\s*(\+)?$/;
             const productLinePattern = /^(?:\d+\s+)?(.+)$/;
+            // Characters that indicate a product line, not a category
+            const productIndicators = /[()\/\#"@.,]/;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -2056,8 +2058,8 @@ Example formats supported:
                     continue;
                 }
 
-                // Check for category header (all caps, no numbers)
-                if (categoryPattern.test(line) && !pricePattern.test(line)) {
+                // Check for category header (all caps, may have numbers like I5/I7, but no product indicators)
+                if (categoryPattern.test(line) && !pricePattern.test(line) && !productIndicators.test(line)) {
                     currentCategory = line;
                     continue;
                 }
