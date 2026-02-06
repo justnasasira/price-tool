@@ -130,13 +130,53 @@ Set confident to false if you're unsure about the exact model specifications.`
     }
 
     let text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
-    console.log('AI response text:', text.substring(0, 200))
+    console.log('AI response length:', text.length)
+    console.log('AI response preview:', text.substring(0, 300))
+    console.log('Has closing brace:', text.includes('}'))
 
     // Remove markdown code blocks if present
     text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
 
     // Try to extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    let jsonMatch = text.match(/\{[\s\S]*\}/)
+
+    // If no closing brace found, try to manually extract fields
+    if (!jsonMatch && text.startsWith('{')) {
+      console.log('Attempting manual field extraction...')
+
+      // Extract seoTitle
+      const seoTitleMatch = text.match(/"seoTitle"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/)
+      // Extract specs - get everything after "specs": " until we hit ", " or end
+      const specsMatch = text.match(/"specs"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*\}|$)/)
+
+      if (seoTitleMatch) {
+        const result = {
+          seoTitle: seoTitleMatch[1].replace(/\\"/g, '"'),
+          specs: specsMatch ? specsMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
+          confident: false // Mark as uncertain since we had to recover
+        }
+
+        console.log('Recovered result:', JSON.stringify(result).substring(0, 200))
+
+        // Update product in database if productId provided
+        if (productId) {
+          await supabaseClient
+            .from('products')
+            .update({
+              seo_title: result.seoTitle,
+              specs: result.specs,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', productId)
+            .eq('user_id', user.id)
+        }
+
+        return new Response(
+          JSON.stringify(result),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
 
     if (jsonMatch) {
       try {
@@ -170,7 +210,7 @@ Set confident to false if you're unsure about the exact model specifications.`
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       } catch (parseError) {
-        console.error('JSON parse error:', parseError, 'Text:', jsonMatch[0])
+        console.error('JSON parse error:', parseError, 'Text:', jsonMatch[0].substring(0, 200))
         return new Response(
           JSON.stringify({ error: 'Failed to parse AI response as JSON', rawResponse: text.substring(0, 500) }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -179,7 +219,7 @@ Set confident to false if you're unsure about the exact model specifications.`
     }
 
     return new Response(
-      JSON.stringify({ error: 'No JSON found in AI response', rawResponse: text.substring(0, 500) }),
+      JSON.stringify({ error: 'No JSON found in AI response', rawResponse: text.substring(0, 500), textLength: text.length }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
