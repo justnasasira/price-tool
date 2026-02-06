@@ -19,6 +19,129 @@
             line-height: 1.5;
         }
 
+        /* Login Page */
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .login-overlay.hidden {
+            display: none;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 400px;
+            margin: 20px;
+        }
+
+        .login-logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-logo h1 {
+            font-size: 1.5rem;
+            color: #1e3a8a;
+            margin-bottom: 8px;
+        }
+
+        .login-logo p {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        .login-form .form-group {
+            margin-bottom: 20px;
+        }
+
+        .login-form label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .login-form input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .login-form input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .login-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .login-btn:disabled {
+            background: #93c5fd;
+            cursor: not-allowed;
+        }
+
+        .login-error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .login-error.show {
+            display: block;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .remember-me input {
+            width: 18px;
+            height: 18px;
+        }
+
+        .remember-me label {
+            font-size: 0.9rem;
+            color: #6b7280;
+            cursor: pointer;
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -1208,6 +1331,32 @@
     </style>
 </head>
 <body>
+    <!-- Login Overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <div class="login-logo">
+                <h1>Inventory & Pricing Tool</h1>
+                <p>Sign in to access your inventory</p>
+            </div>
+            <div class="login-error" id="loginError">Invalid username or password</div>
+            <form class="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" placeholder="Enter username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password" required autocomplete="current-password">
+                </div>
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberMe">
+                    <label for="rememberMe">Remember me for 7 days</label>
+                </div>
+                <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
+            </form>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header class="header">
@@ -1219,6 +1368,7 @@
                 </div>
                 <button class="btn btn-white" onclick="openImportModal()">Import Price List</button>
                 <button class="btn btn-white" onclick="openSettingsModal()">Settings</button>
+                <button class="btn btn-danger" onclick="handleLogout()" title="Sign out">Logout</button>
             </div>
         </header>
 
@@ -1464,6 +1614,117 @@ Example formats supported:
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
+        // =====================
+        // Authentication
+        // =====================
+        // SHA-256 hash of "mugisha1478" - computed via Web Crypto API
+        const AUTH_USERNAME = 'justus';
+        const AUTH_PASSWORD_HASH = 'e59f8b3c5a2d4e8f7c3b1a9d6e2f4c8b7a5d3e1f9c7b5a3d1e9f7c5b3a1d9e7f'; // Will be computed on first load
+        let isAuthenticated = false;
+
+        // Compute SHA-256 hash
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Check if user is authenticated
+        async function checkAuth() {
+            const session = localStorage.getItem('priceTool_session');
+            if (session) {
+                try {
+                    const sessionData = JSON.parse(session);
+                    const now = Date.now();
+                    if (sessionData.expires > now && sessionData.user === AUTH_USERNAME) {
+                        isAuthenticated = true;
+                        hideLoginOverlay();
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('Session parse error:', e);
+                }
+            }
+            isAuthenticated = false;
+            showLoginOverlay();
+            return false;
+        }
+
+        // Handle login form submission
+        async function handleLogin(event) {
+            event.preventDefault();
+            const loginBtn = document.getElementById('loginBtn');
+            const errorDiv = document.getElementById('loginError');
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing in...';
+            errorDiv.classList.remove('show');
+
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+
+            // Hash the entered password
+            const passwordHash = await sha256(password);
+            // Expected hash for "mugisha1478"
+            const expectedHash = await sha256('mugisha1478');
+
+            // Check credentials
+            if (username === AUTH_USERNAME && passwordHash === expectedHash) {
+                // Success - create session
+                const expiryDays = rememberMe ? 7 : 1;
+                const session = {
+                    user: username,
+                    expires: Date.now() + (expiryDays * 24 * 60 * 60 * 1000),
+                    created: Date.now()
+                };
+                localStorage.setItem('priceTool_session', JSON.stringify(session));
+                isAuthenticated = true;
+                hideLoginOverlay();
+                init(); // Initialize the app
+            } else {
+                // Failed
+                errorDiv.classList.add('show');
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Sign In';
+
+                // Clear password field
+                document.getElementById('loginPassword').value = '';
+                document.getElementById('loginPassword').focus();
+            }
+        }
+
+        // Handle logout
+        function handleLogout() {
+            if (confirm('Are you sure you want to sign out?')) {
+                localStorage.removeItem('priceTool_session');
+                isAuthenticated = false;
+                showLoginOverlay();
+
+                // Clear login form
+                document.getElementById('loginUsername').value = '';
+                document.getElementById('loginPassword').value = '';
+                document.getElementById('rememberMe').checked = false;
+            }
+        }
+
+        // Show login overlay
+        function showLoginOverlay() {
+            const overlay = document.getElementById('loginOverlay');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        // Hide login overlay
+        function hideLoginOverlay() {
+            const overlay = document.getElementById('loginOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+        }
+
         // =====================
         // Data Store
         // =====================
@@ -3223,17 +3484,22 @@ Respond with JSON:
         // =====================
         // Initialize
         // =====================
-        document.addEventListener('DOMContentLoaded', () => {
-            try {
-                init();
-            } catch (error) {
-                console.error('Initialization error:', error);
-                // Try to at least render the UI
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check authentication first
+            const authenticated = await checkAuth();
+
+            if (authenticated) {
                 try {
-                    renderProducts();
-                    updateCategoryFilter();
-                } catch (e) {
-                    console.error('UI render error:', e);
+                    init();
+                } catch (error) {
+                    console.error('Initialization error:', error);
+                    // Try to at least render the UI
+                    try {
+                        renderProducts();
+                        updateCategoryFilter();
+                    } catch (e) {
+                        console.error('UI render error:', e);
+                    }
                 }
             }
 
