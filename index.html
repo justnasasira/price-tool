@@ -2640,6 +2640,10 @@ Example formats supported:
 
             if (!response.ok) {
                 const error = await response.json();
+                console.error('Edge Function error details:', error);
+                if (error.rawResponse) {
+                    console.log('Raw AI response:', error.rawResponse);
+                }
                 throw new Error(error.error || 'SEO enrichment failed');
             }
 
