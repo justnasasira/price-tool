@@ -28,17 +28,24 @@ serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
+      console.error('Auth error:', userError)
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Unauthorized: ' + (userError?.message || 'No user') }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const { data: settings } = await supabaseClient
+    console.log('User authenticated:', user.email)
+
+    const { data: settings, error: settingsError } = await supabaseClient
       .from('user_settings')
       .select('gemini_api_key, gemini_model')
       .eq('user_id', user.id)
       .single()
+
+    if (settingsError) {
+      console.error('Settings error:', settingsError)
+    }
 
     if (!settings?.gemini_api_key) {
       return new Response(
@@ -47,6 +54,8 @@ serve(async (req) => {
       )
     }
 
+    console.log('Gemini API key found, model:', settings.gemini_model)
+
     const { rawText } = await req.json()
     if (!rawText) {
       return new Response(
@@ -54,6 +63,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log('Input length:', rawText.length)
 
     const model = settings.gemini_model || 'gemini-2.5-flash'
 
@@ -102,22 +113,28 @@ Output ONLY the formatted list. Include ALL products.`
       const errorText = await geminiResponse.text()
       console.error('Gemini API error:', errorText)
       return new Response(
-        JSON.stringify({ error: 'AI formatting failed', details: errorText }),
+        JSON.stringify({ error: 'Gemini API error: ' + errorText }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     const geminiData = await geminiResponse.json()
+    console.log('Gemini response received')
 
     if (!geminiData.candidates || geminiData.candidates.length === 0) {
+      console.error('No candidates:', JSON.stringify(geminiData))
       return new Response(
-        JSON.stringify({ error: 'No response from AI' }),
+        JSON.stringify({ error: 'No response from AI. Check if model is available.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     let text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
+
+    // Remove markdown code blocks if present
     text = text.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim()
+
+    console.log('Output length:', text.length)
 
     return new Response(
       JSON.stringify({ formattedText: text }),
@@ -127,7 +144,7 @@ Output ONLY the formatted list. Include ALL products.`
   } catch (error) {
     console.error('Error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

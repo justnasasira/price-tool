@@ -129,8 +129,11 @@ Set confident to false if you're unsure about the exact model specifications.`
       )
     }
 
-    const text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
+    let text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
     console.log('AI response text:', text.substring(0, 200))
+
+    // Remove markdown code blocks if present
+    text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
 
     // Try to extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/)
