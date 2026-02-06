@@ -144,15 +144,24 @@ Set confident to false if you're unsure about the exact model specifications.`
     if (!jsonMatch && text.startsWith('{')) {
       console.log('Attempting manual field extraction...')
 
-      // Extract seoTitle
-      const seoTitleMatch = text.match(/"seoTitle"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/)
-      // Extract specs - get everything after "specs": " until we hit ", " or end
-      const specsMatch = text.match(/"specs"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*\}|$)/)
+      // Extract seoTitle - handle escaped quotes properly
+      const seoTitleMatch = text.match(/"seoTitle"\s*:\s*"((?:[^"\\]|\\.)*)"/s)
+      // Extract specs - get everything after "specs": "
+      const specsStartMatch = text.match(/"specs"\s*:\s*"/)
+      let specs = ''
+      if (specsStartMatch) {
+        const specsStart = text.indexOf(specsStartMatch[0]) + specsStartMatch[0].length
+        // Find the end - look for ", "confident" or just take until end
+        let specsEnd = text.indexOf('", "confident"', specsStart)
+        if (specsEnd === -1) specsEnd = text.indexOf('"}', specsStart)
+        if (specsEnd === -1) specsEnd = text.length
+        specs = text.substring(specsStart, specsEnd)
+      }
 
       if (seoTitleMatch) {
         const result = {
-          seoTitle: seoTitleMatch[1].replace(/\\"/g, '"'),
-          specs: specsMatch ? specsMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
+          seoTitle: seoTitleMatch[1].replace(/\\"/g, '"').replace(/\\n/g, ' '),
+          specs: specs.replace(/\\n/g, '\n').replace(/\\"/g, '"'),
           confident: false // Mark as uncertain since we had to recover
         }
 
