@@ -204,7 +204,7 @@ serve(async (req) => {
     if (aiProvider === 'claude') {
       responseText = await callClaudeAPI(
         settings.claude_api_key,
-        settings.claude_model || 'claude-sonnet-4-20250514',
+        settings.claude_model || 'claude-3-5-sonnet-20241022',
         productName
       )
     } else {
