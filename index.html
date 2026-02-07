@@ -1527,7 +1527,8 @@ Example formats supported:
                         <label>Select AI Provider</label>
                         <select class="filter-select" id="settingsAiProvider" style="width: 100%;" onchange="toggleAiProviderSettings()">
                             <option value="gemini">Google Gemini</option>
-                            <option value="claude">Anthropic Claude</option>
+                            <option value="claude">Anthropic Claude (Direct API)</option>
+                            <option value="bedrock">AWS Bedrock (Claude)</option>
                         </select>
                     </div>
 
@@ -1572,6 +1573,48 @@ Example formats supported:
                         </div>
                         <p style="font-size: 0.85rem; color: #6b7280;">
                             Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank">Anthropic Console</a>
+                        </p>
+                    </div>
+
+                    <!-- AWS Bedrock Settings -->
+                    <div id="bedrockSettings" style="display: none;">
+                        <div class="form-group">
+                            <label>AWS Access Key ID</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="settingsAwsAccessKey" placeholder="Enter your AWS Access Key ID" autocomplete="off">
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsAwsAccessKey', this)">Show</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>AWS Secret Access Key</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="settingsAwsSecretKey" placeholder="Enter your AWS Secret Access Key" autocomplete="off">
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsAwsSecretKey', this)">Show</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>AWS Region</label>
+                            <select class="filter-select" id="settingsAwsRegion" style="width: 100%;">
+                                <option value="us-east-1">US East (N. Virginia)</option>
+                                <option value="us-west-2">US West (Oregon)</option>
+                                <option value="eu-west-1">Europe (Ireland)</option>
+                                <option value="eu-central-1">Europe (Frankfurt)</option>
+                                <option value="ap-northeast-1">Asia Pacific (Tokyo)</option>
+                                <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                                <option value="ap-southeast-2">Asia Pacific (Sydney)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Bedrock Model</label>
+                            <select class="filter-select" id="settingsBedrockModel" style="width: 100%;">
+                                <option value="anthropic.claude-3-5-sonnet-20241022-v2:0">Claude 3.5 Sonnet v2 (Recommended)</option>
+                                <option value="anthropic.claude-3-5-haiku-20241022-v1:0">Claude 3.5 Haiku (Fast)</option>
+                                <option value="anthropic.claude-3-opus-20240229-v1:0">Claude 3 Opus (Most Capable)</option>
+                                <option value="anthropic.claude-3-sonnet-20240229-v1:0">Claude 3 Sonnet</option>
+                            </select>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #6b7280;">
+                            Requires AWS IAM credentials with Bedrock access. <a href="https://console.aws.amazon.com/bedrock" target="_blank">AWS Bedrock Console</a>
                         </p>
                     </div>
                 </div>
@@ -1792,6 +1835,10 @@ Example formats supported:
             geminiApiKey: '',
             claudeApiKey: '',
             claudeModel: 'claude-3-5-sonnet-20241022',
+            awsAccessKey: '',
+            awsSecretKey: '',
+            awsRegion: 'us-east-1',
+            bedrockModel: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
             geminiModel: 'gemini-2.5-flash',
             vatRate: 0.18,
             markupRate: 0.30,
@@ -1920,6 +1967,10 @@ Example formats supported:
                         geminiApiKey: settingsData.gemini_api_key || '',
                         claudeApiKey: settingsData.claude_api_key || '',
                         claudeModel: settingsData.claude_model || 'claude-3-5-sonnet-20241022',
+                        awsAccessKey: settingsData.aws_access_key || '',
+                        awsSecretKey: settingsData.aws_secret_key || '',
+                        awsRegion: settingsData.aws_region || 'us-east-1',
+                        bedrockModel: settingsData.bedrock_model || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
                         itemsPerPage: settingsData.items_per_page || 10
                     };
                 }
@@ -1984,6 +2035,10 @@ Example formats supported:
                         gemini_model: settings.geminiModel,
                         claude_api_key: settings.claudeApiKey,
                         claude_model: settings.claudeModel,
+                        aws_access_key: settings.awsAccessKey,
+                        aws_secret_key: settings.awsSecretKey,
+                        aws_region: settings.awsRegion,
+                        bedrock_model: settings.bedrockModel,
                         items_per_page: settings.itemsPerPage,
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'user_id' });
@@ -3285,6 +3340,10 @@ Example formats supported:
             document.getElementById('settingsGeminiModel').value = settings.geminiModel || 'gemini-2.5-flash';
             document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
             document.getElementById('settingsClaudeModel').value = settings.claudeModel || 'claude-3-5-sonnet-20241022';
+            document.getElementById('settingsAwsAccessKey').value = settings.awsAccessKey || '';
+            document.getElementById('settingsAwsSecretKey').value = settings.awsSecretKey || '';
+            document.getElementById('settingsAwsRegion').value = settings.awsRegion || 'us-east-1';
+            document.getElementById('settingsBedrockModel').value = settings.bedrockModel || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
             document.getElementById('settingsModal').classList.remove('hidden');
 
             // Show/hide appropriate provider settings
@@ -3298,6 +3357,7 @@ Example formats supported:
             const provider = document.getElementById('settingsAiProvider').value;
             document.getElementById('geminiSettings').style.display = provider === 'gemini' ? 'block' : 'none';
             document.getElementById('claudeSettings').style.display = provider === 'claude' ? 'block' : 'none';
+            document.getElementById('bedrockSettings').style.display = provider === 'bedrock' ? 'block' : 'none';
         }
 
         function closeSettingsModal() {
@@ -3313,6 +3373,10 @@ Example formats supported:
             settings.geminiModel = document.getElementById('settingsGeminiModel').value || 'gemini-2.5-flash';
             settings.claudeApiKey = document.getElementById('settingsClaudeKey').value.trim();
             settings.claudeModel = document.getElementById('settingsClaudeModel').value || 'claude-3-5-sonnet-20241022';
+            settings.awsAccessKey = document.getElementById('settingsAwsAccessKey').value.trim();
+            settings.awsSecretKey = document.getElementById('settingsAwsSecretKey').value.trim();
+            settings.awsRegion = document.getElementById('settingsAwsRegion').value || 'us-east-1';
+            settings.bedrockModel = document.getElementById('settingsBedrockModel').value || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
 
             document.getElementById('exchangeRateInput').value = settings.exchangeRate;
 
