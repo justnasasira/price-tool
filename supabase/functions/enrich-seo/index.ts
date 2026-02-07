@@ -173,7 +173,7 @@ async function callClaudeAPI(apiKey: string, model: string, productName: string)
   return data.content[0].text
 }
 
-async function callBedrockAPI(accessKey: string, secretKey: string, region: string, model: string, productName: string) {
+async function callBedrockAPI(apiKey: string, accessKey: string, secretKey: string, region: string, model: string, productName: string) {
   const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${model}/invoke`
 
   const body = JSON.stringify({
@@ -186,6 +186,8 @@ async function callBedrockAPI(accessKey: string, secretKey: string, region: stri
   })
 
   const headers = await signAwsRequest('POST', url, body, accessKey, secretKey, region, 'bedrock')
+  // Add API key to headers
+  headers['x-api-key'] = apiKey
 
   const response = await fetch(url, {
     method: 'POST',
@@ -286,7 +288,7 @@ serve(async (req) => {
 
     const { data: settings } = await supabaseClient
       .from('user_settings')
-      .select('ai_provider, gemini_api_key, gemini_model, claude_api_key, claude_model, aws_access_key, aws_secret_key, aws_region, bedrock_model')
+      .select('ai_provider, gemini_api_key, gemini_model, claude_api_key, claude_model, bedrock_api_key, aws_access_key, aws_secret_key, aws_region, bedrock_model')
       .eq('user_id', user.id)
       .single()
 
@@ -294,9 +296,9 @@ serve(async (req) => {
     console.log('AI Provider:', aiProvider)
 
     // Check if the selected provider has credentials
-    if (aiProvider === 'bedrock' && (!settings?.aws_access_key || !settings?.aws_secret_key)) {
+    if (aiProvider === 'bedrock' && (!settings?.bedrock_api_key || !settings?.aws_access_key || !settings?.aws_secret_key)) {
       return new Response(
-        JSON.stringify({ error: 'AWS credentials not configured. Please add them in Settings.' }),
+        JSON.stringify({ error: 'AWS Bedrock credentials not configured. Please add API key, Access Key, and Secret Key in Settings.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -329,6 +331,7 @@ serve(async (req) => {
     let responseText: string
     if (aiProvider === 'bedrock') {
       responseText = await callBedrockAPI(
+        settings.bedrock_api_key,
         settings.aws_access_key,
         settings.aws_secret_key,
         settings.aws_region || 'us-east-1',

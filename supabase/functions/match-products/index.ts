@@ -149,7 +149,7 @@ async function callClaudeAPI(apiKey: string, model: string, prompt: string) {
   return data.content?.[0]?.text || ''
 }
 
-async function callBedrockAPI(accessKey: string, secretKey: string, region: string, model: string, prompt: string) {
+async function callBedrockAPI(apiKey: string, accessKey: string, secretKey: string, region: string, model: string, prompt: string) {
   const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${model}/invoke`
 
   const body = JSON.stringify({
@@ -162,6 +162,7 @@ async function callBedrockAPI(accessKey: string, secretKey: string, region: stri
   })
 
   const headers = await signAwsRequest('POST', url, body, accessKey, secretKey, region, 'bedrock')
+  headers['x-api-key'] = apiKey
 
   const response = await fetch(url, {
     method: 'POST',
@@ -208,7 +209,7 @@ serve(async (req) => {
 
     const { data: settings } = await supabaseClient
       .from('user_settings')
-      .select('ai_provider, gemini_api_key, gemini_model, claude_api_key, claude_model, aws_access_key, aws_secret_key, aws_region, bedrock_model')
+      .select('ai_provider, gemini_api_key, gemini_model, claude_api_key, claude_model, bedrock_api_key, aws_access_key, aws_secret_key, aws_region, bedrock_model')
       .eq('user_id', user.id)
       .single()
 
@@ -217,7 +218,7 @@ serve(async (req) => {
     // Check if the selected provider has credentials
     let hasCredentials = false
     if (aiProvider === 'bedrock') {
-      hasCredentials = !!(settings?.aws_access_key && settings?.aws_secret_key)
+      hasCredentials = !!(settings?.bedrock_api_key && settings?.aws_access_key && settings?.aws_secret_key)
     } else if (aiProvider === 'claude') {
       hasCredentials = !!settings?.claude_api_key
     } else {
@@ -250,6 +251,7 @@ serve(async (req) => {
     try {
       if (aiProvider === 'bedrock') {
         responseText = await callBedrockAPI(
+          settings.bedrock_api_key,
           settings.aws_access_key,
           settings.aws_secret_key,
           settings.aws_region || 'us-east-1',

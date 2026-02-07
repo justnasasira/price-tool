@@ -1579,6 +1579,13 @@ Example formats supported:
                     <!-- AWS Bedrock Settings -->
                     <div id="bedrockSettings" style="display: none;">
                         <div class="form-group">
+                            <label>Bedrock API Key</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="settingsBedrockApiKey" placeholder="Enter your Bedrock API key" autocomplete="off">
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsBedrockApiKey', this)">Show</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
                             <label>AWS Access Key ID</label>
                             <div class="password-input-wrapper">
                                 <input type="password" id="settingsAwsAccessKey" placeholder="Enter your AWS Access Key ID" autocomplete="off">
@@ -1835,6 +1842,7 @@ Example formats supported:
             geminiApiKey: '',
             claudeApiKey: '',
             claudeModel: 'claude-3-5-sonnet-20241022',
+            bedrockApiKey: '',
             awsAccessKey: '',
             awsSecretKey: '',
             awsRegion: 'us-east-1',
@@ -1967,6 +1975,7 @@ Example formats supported:
                         geminiApiKey: settingsData.gemini_api_key || '',
                         claudeApiKey: settingsData.claude_api_key || '',
                         claudeModel: settingsData.claude_model || 'claude-3-5-sonnet-20241022',
+                        bedrockApiKey: settingsData.bedrock_api_key || '',
                         awsAccessKey: settingsData.aws_access_key || '',
                         awsSecretKey: settingsData.aws_secret_key || '',
                         awsRegion: settingsData.aws_region || 'us-east-1',
@@ -2035,6 +2044,7 @@ Example formats supported:
                         gemini_model: settings.geminiModel,
                         claude_api_key: settings.claudeApiKey,
                         claude_model: settings.claudeModel,
+                        bedrock_api_key: settings.bedrockApiKey,
                         aws_access_key: settings.awsAccessKey,
                         aws_secret_key: settings.awsSecretKey,
                         aws_region: settings.awsRegion,
@@ -3340,6 +3350,7 @@ Example formats supported:
             document.getElementById('settingsGeminiModel').value = settings.geminiModel || 'gemini-2.5-flash';
             document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
             document.getElementById('settingsClaudeModel').value = settings.claudeModel || 'claude-3-5-sonnet-20241022';
+            document.getElementById('settingsBedrockApiKey').value = settings.bedrockApiKey || '';
             document.getElementById('settingsAwsAccessKey').value = settings.awsAccessKey || '';
             document.getElementById('settingsAwsSecretKey').value = settings.awsSecretKey || '';
             document.getElementById('settingsAwsRegion').value = settings.awsRegion || 'us-east-1';
@@ -3373,6 +3384,7 @@ Example formats supported:
             settings.geminiModel = document.getElementById('settingsGeminiModel').value || 'gemini-2.5-flash';
             settings.claudeApiKey = document.getElementById('settingsClaudeKey').value.trim();
             settings.claudeModel = document.getElementById('settingsClaudeModel').value || 'claude-3-5-sonnet-20241022';
+            settings.bedrockApiKey = document.getElementById('settingsBedrockApiKey').value.trim();
             settings.awsAccessKey = document.getElementById('settingsAwsAccessKey').value.trim();
             settings.awsSecretKey = document.getElementById('settingsAwsSecretKey').value.trim();
             settings.awsRegion = document.getElementById('settingsAwsRegion').value || 'us-east-1';
