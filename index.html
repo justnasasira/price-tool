@@ -2832,9 +2832,24 @@ Example formats supported:
                 exact: [],
                 likely: [],
                 new: [],
-                missing: []
+                missing: [],
+                isDifferentMonth: false
             };
 
+            // Detect if we're importing a different month
+            const importMonth = newProducts[0]?.monthTag || '';
+            const existingMonths = [...new Set(products.filter(p => p.active).map(p => p.monthTag))];
+            matches.isDifferentMonth = importMonth && existingMonths.length > 0 &&
+                !existingMonths.includes(importMonth);
+
+            // Create lookup by normalized name + SKU (products with different SKUs are different products)
+            const existingByNameSku = new Map();
+            products.filter(p => p.active).forEach(p => {
+                const key = normalizeProductName(p.name) + '|' + (p.sku || '').toLowerCase();
+                existingByNameSku.set(key, p);
+            });
+
+            // Also create lookup by name only for fuzzy matching
             const existingByName = new Map();
             products.filter(p => p.active).forEach(p => {
                 existingByName.set(normalizeProductName(p.name), p);
@@ -2844,42 +2859,66 @@ Example formats supported:
 
             newProducts.forEach(np => {
                 const normalized = normalizeProductName(np.name);
-                const existing = existingByName.get(normalized);
+                const nameSkuKey = normalized + '|' + (np.sku || '').toLowerCase();
 
-                if (existing) {
+                // First try exact match by name + SKU
+                const exactBySku = existingByNameSku.get(nameSkuKey);
+                if (exactBySku) {
+                    matchedExisting.add(exactBySku.id);
+                    if (exactBySku.basePrice === np.basePrice) {
+                        matches.exact.push({ existing: exactBySku, new: np });
+                    } else {
+                        matches.likely.push({ existing: exactBySku, new: np, confidence: 1.0 });
+                    }
+                    return;
+                }
+
+                // If new product has a SKU, treat it as new (different SKU = different product)
+                if (np.sku) {
+                    matches.new.push(np);
+                    return;
+                }
+
+                // Try exact match by name only (for products without SKU)
+                const existing = existingByName.get(normalized);
+                if (existing && !existing.sku && !matchedExisting.has(existing.id)) {
                     matchedExisting.add(existing.id);
                     if (existing.basePrice === np.basePrice) {
                         matches.exact.push({ existing, new: np });
                     } else {
                         matches.likely.push({ existing, new: np, confidence: 1.0 });
                     }
+                    return;
+                }
+
+                // Try fuzzy match (only for products without SKU)
+                let bestMatch = null;
+                let bestScore = 0;
+
+                for (const [name, ep] of existingByName) {
+                    if (matchedExisting.has(ep.id)) continue;
+                    if (ep.sku) continue; // Don't fuzzy match products with SKUs
+                    const score = similarityScore(normalized, name);
+                    if (score > 0.7 && score > bestScore) {
+                        bestScore = score;
+                        bestMatch = ep;
+                    }
+                }
+
+                if (bestMatch) {
+                    matchedExisting.add(bestMatch.id);
+                    matches.likely.push({ existing: bestMatch, new: np, confidence: bestScore });
                 } else {
-                    // Try fuzzy match
-                    let bestMatch = null;
-                    let bestScore = 0;
-
-                    for (const [name, ep] of existingByName) {
-                        if (matchedExisting.has(ep.id)) continue;
-                        const score = similarityScore(normalized, name);
-                        if (score > 0.7 && score > bestScore) {
-                            bestScore = score;
-                            bestMatch = ep;
-                        }
-                    }
-
-                    if (bestMatch) {
-                        matchedExisting.add(bestMatch.id);
-                        matches.likely.push({ existing: bestMatch, new: np, confidence: bestScore });
-                    } else {
-                        matches.new.push(np);
-                    }
+                    matches.new.push(np);
                 }
             });
 
-            // Find missing products
-            products.filter(p => p.active && !matchedExisting.has(p.id)).forEach(p => {
-                matches.missing.push(p);
-            });
+            // Find missing products - only if importing a different month
+            if (matches.isDifferentMonth) {
+                products.filter(p => p.active && !matchedExisting.has(p.id)).forEach(p => {
+                    matches.missing.push(p);
+                });
+            }
 
             pendingImport = { matches, newProducts };
             showUpdateModal(matches);
@@ -2947,11 +2986,18 @@ Example formats supported:
 
                 updateMatchProgress('Processing results...', 'Categorizing product matches', 75);
 
+                // Detect if we're importing a different month
+                const importMonth = newProducts[0]?.monthTag || '';
+                const existingMonths = [...new Set(products.filter(p => p.active).map(p => p.monthTag))];
+                const isDifferentMonth = importMonth && existingMonths.length > 0 &&
+                    !existingMonths.includes(importMonth);
+
                 const matches = {
                     exact: [],
                     likely: [],
                     new: [],
-                    missing: []
+                    missing: [],
+                    isDifferentMonth
                 };
 
                 // Process AI matches
@@ -2974,11 +3020,13 @@ Example formats supported:
                     }
                 });
 
-                // Missing products
-                (aiResult.missingIds || []).forEach(id => {
-                    const p = products.find(pr => pr.id === id);
-                    if (p) matches.missing.push(p);
-                });
+                // Missing products - only if importing a different month
+                if (isDifferentMonth) {
+                    (aiResult.missingIds || []).forEach(id => {
+                        const p = products.find(pr => pr.id === id);
+                        if (p) matches.missing.push(p);
+                    });
+                }
 
                 pendingImport = { matches, newProducts };
 
@@ -3026,86 +3074,74 @@ Example formats supported:
             const body = document.getElementById('updateModalBody');
             let html = '';
 
-            // Exact matches
-            if (matches.exact.length > 0) {
-                html += `
+            // Helper to create section with bulk checkbox
+            function createSection(title, badge, badgeClass, items, type, renderItem) {
+                if (items.length === 0) return '';
+                return `
                     <div class="diff-section">
-                        <h3><span class="diff-badge exact">✓</span> Exact Matches (${matches.exact.length})</h3>
-                        ${matches.exact.map((m, i) => `
-                            <div class="diff-item exact">
-                                <input type="checkbox" class="diff-item-checkbox" data-type="exact" data-index="${i}" checked>
-                                <div class="diff-item-content">
-                                    <div class="diff-item-name">${escapeHtml(m.existing.name)}</div>
-                                    <div class="diff-item-details">Price: $${m.existing.basePrice} (no change)</div>
-                                </div>
-                            </div>
-                        `).join('')}
+                        <h3 style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" class="bulk-checkbox" data-type="${type}" checked onclick="toggleBulkCheckbox('${type}', this.checked)">
+                            <span class="diff-badge ${badgeClass}">${badge}</span> ${title} (${items.length})
+                        </h3>
+                        ${items.map((item, i) => renderItem(item, i)).join('')}
                     </div>
                 `;
             }
+
+            // Exact matches
+            html += createSection('Exact Matches', '✓', 'exact', matches.exact, 'exact', (m, i) => `
+                <div class="diff-item exact">
+                    <input type="checkbox" class="diff-item-checkbox" data-type="exact" data-index="${i}" checked>
+                    <div class="diff-item-content">
+                        <div class="diff-item-name">${escapeHtml(m.existing.name)}</div>
+                        <div class="diff-item-details">Price: $${m.existing.basePrice} (no change)</div>
+                    </div>
+                </div>
+            `);
 
             // Likely matches (price changes)
-            if (matches.likely.length > 0) {
-                html += `
-                    <div class="diff-section">
-                        <h3><span class="diff-badge likely">~</span> Price Updates (${matches.likely.length})</h3>
-                        ${matches.likely.map((m, i) => {
-                            const priceDiff = m.new.basePrice - m.existing.basePrice;
-                            const priceClass = priceDiff > 0 ? 'price-up' : 'price-down';
-                            const priceSign = priceDiff > 0 ? '+' : '';
-                            return `
-                                <div class="diff-item likely">
-                                    <input type="checkbox" class="diff-item-checkbox" data-type="likely" data-index="${i}" checked>
-                                    <div class="diff-item-content">
-                                        <div class="diff-item-name">${escapeHtml(m.existing.name)}</div>
-                                        <div class="diff-item-details">
-                                            ${m.reason ? `Match: ${m.reason}` : `Confidence: ${Math.round(m.confidence * 100)}%`}
-                                        </div>
-                                        <div class="diff-item-price-change ${priceClass}">
-                                            $${m.existing.basePrice} → $${m.new.basePrice} (${priceSign}$${priceDiff.toFixed(2)})
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+            html += createSection('Price Updates', '~', 'likely', matches.likely, 'likely', (m, i) => {
+                const priceDiff = m.new.basePrice - m.existing.basePrice;
+                const priceClass = priceDiff > 0 ? 'price-up' : 'price-down';
+                const priceSign = priceDiff > 0 ? '+' : '';
+                return `
+                    <div class="diff-item likely">
+                        <input type="checkbox" class="diff-item-checkbox" data-type="likely" data-index="${i}" checked>
+                        <div class="diff-item-content">
+                            <div class="diff-item-name">${escapeHtml(m.existing.name)}</div>
+                            <div class="diff-item-details">
+                                ${m.reason ? `Match: ${m.reason}` : `Confidence: ${Math.round(m.confidence * 100)}%`}
+                            </div>
+                            <div class="diff-item-price-change ${priceClass}">
+                                $${m.existing.basePrice} → $${m.new.basePrice} (${priceSign}$${priceDiff.toFixed(2)})
+                            </div>
+                        </div>
                     </div>
                 `;
-            }
+            });
 
             // New products
-            if (matches.new.length > 0) {
-                html += `
-                    <div class="diff-section">
-                        <h3><span class="diff-badge new">+</span> New Products (${matches.new.length})</h3>
-                        ${matches.new.map((p, i) => `
-                            <div class="diff-item new">
-                                <input type="checkbox" class="diff-item-checkbox" data-type="new" data-index="${i}" checked>
-                                <div class="diff-item-content">
-                                    <div class="diff-item-name">${escapeHtml(p.name)}</div>
-                                    <div class="diff-item-details">Category: ${escapeHtml(p.category)} | Price: $${p.basePrice}</div>
-                                </div>
-                            </div>
-                        `).join('')}
+            html += createSection('New Products', '+', 'new', matches.new, 'new', (p, i) => `
+                <div class="diff-item new">
+                    <input type="checkbox" class="diff-item-checkbox" data-type="new" data-index="${i}" checked>
+                    <div class="diff-item-content">
+                        <div class="diff-item-name">${escapeHtml(p.name)}</div>
+                        <div class="diff-item-details">Category: ${escapeHtml(p.category)} | Price: $${p.basePrice}</div>
                     </div>
-                `;
-            }
+                </div>
+            `);
 
-            // Missing products
-            if (matches.missing.length > 0) {
-                html += `
-                    <div class="diff-section">
-                        <h3><span class="diff-badge missing">-</span> No Longer Listed (${matches.missing.length})</h3>
-                        ${matches.missing.map((p, i) => `
-                            <div class="diff-item missing">
-                                <input type="checkbox" class="diff-item-checkbox" data-type="missing" data-index="${i}" checked>
-                                <div class="diff-item-content">
-                                    <div class="diff-item-name">${escapeHtml(p.name)}</div>
-                                    <div class="diff-item-details">Will be marked as inactive (not deleted)</div>
-                                </div>
-                            </div>
-                        `).join('')}
+            // Missing products - only show if importing a different month
+            if (matches.missing.length > 0 && matches.isDifferentMonth) {
+                html += createSection('No Longer Listed', '-', 'missing', matches.missing, 'missing', (p, i) => `
+                    <div class="diff-item missing">
+                        <input type="checkbox" class="diff-item-checkbox" data-type="missing" data-index="${i}" checked>
+                        <div class="diff-item-content">
+                            <div class="diff-item-name">${escapeHtml(p.name)}</div>
+                            <div class="diff-item-details">Will be marked as inactive (not deleted)</div>
+                        </div>
                     </div>
-                `;
+                `);
             }
 
             if (!html) {
@@ -3114,6 +3150,12 @@ Example formats supported:
 
             body.innerHTML = html;
             document.getElementById('updateModal').classList.remove('hidden');
+        }
+
+        function toggleBulkCheckbox(type, checked) {
+            document.querySelectorAll(`[data-type="${type}"].diff-item-checkbox`).forEach(cb => {
+                cb.checked = checked;
+            });
         }
 
         function closeUpdateModal() {
