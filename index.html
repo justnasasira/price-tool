@@ -1522,25 +1522,58 @@ Example formats supported:
                     </div>
                 </div>
                 <div class="settings-section">
-                    <h3>Gemini API (for AI Features)</h3>
+                    <h3>AI Provider (for SEO & Matching)</h3>
                     <div class="form-group">
-                        <label>API Key</label>
-                        <div class="password-input-wrapper">
-                            <input type="password" id="settingsGeminiKey" placeholder="Enter your Gemini API key" autocomplete="off">
-                            <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsGeminiKey', this)">Show</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Model</label>
-                        <select class="filter-select" id="settingsGeminiModel" style="width: 100%;">
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
-                            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Capable)</option>
-                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Legacy)</option>
+                        <label>Select AI Provider</label>
+                        <select class="filter-select" id="settingsAiProvider" style="width: 100%;" onchange="toggleAiProviderSettings()">
+                            <option value="gemini">Google Gemini</option>
+                            <option value="claude">Anthropic Claude</option>
                         </select>
                     </div>
-                    <p style="font-size: 0.85rem; color: #6b7280;">
-                        Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
-                    </p>
+
+                    <!-- Gemini Settings -->
+                    <div id="geminiSettings">
+                        <div class="form-group">
+                            <label>Gemini API Key</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="settingsGeminiKey" placeholder="Enter your Gemini API key" autocomplete="off">
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsGeminiKey', this)">Show</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Gemini Model</label>
+                            <select class="filter-select" id="settingsGeminiModel" style="width: 100%;">
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Capable)</option>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Legacy)</option>
+                            </select>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #6b7280;">
+                            Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
+                        </p>
+                    </div>
+
+                    <!-- Claude Settings -->
+                    <div id="claudeSettings" style="display: none;">
+                        <div class="form-group">
+                            <label>Claude API Key</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="settingsClaudeKey" placeholder="Enter your Anthropic API key" autocomplete="off">
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('settingsClaudeKey', this)">Show</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Claude Model</label>
+                            <select class="filter-select" id="settingsClaudeModel" style="width: 100%;">
+                                <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Recommended)</option>
+                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast)</option>
+                                <option value="claude-opus-4-20250514">Claude Opus 4 (Most Capable)</option>
+                            </select>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #6b7280;">
+                            Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank">Anthropic Console</a>
+                        </p>
+                    </div>
                 </div>
                 <div class="settings-section">
                     <h3>Cloud Sync</h3>
@@ -1755,7 +1788,10 @@ Example formats supported:
         // Settings stored in Supabase user_settings table
         let settings = {
             exchangeRate: 3750,
+            aiProvider: 'gemini',
             geminiApiKey: '',
+            claudeApiKey: '',
+            claudeModel: 'claude-sonnet-4-20250514',
             geminiModel: 'gemini-2.5-flash',
             vatRate: 0.18,
             markupRate: 0.30,
@@ -1879,9 +1915,12 @@ Example formats supported:
                         exchangeRate: parseFloat(settingsData.exchange_rate) || 3750,
                         vatRate: parseFloat(settingsData.vat_rate) || 0.18,
                         markupRate: parseFloat(settingsData.markup_rate) || 0.30,
+                        aiProvider: settingsData.ai_provider || 'gemini',
                         geminiModel: settingsData.gemini_model || 'gemini-2.5-flash',
-                        itemsPerPage: settingsData.items_per_page || 10,
-                        geminiApiKey: settingsData.gemini_api_key || ''
+                        geminiApiKey: settingsData.gemini_api_key || '',
+                        claudeApiKey: settingsData.claude_api_key || '',
+                        claudeModel: settingsData.claude_model || 'claude-sonnet-4-20250514',
+                        itemsPerPage: settingsData.items_per_page || 10
                     };
                 }
 
@@ -1932,7 +1971,7 @@ Example formats supported:
             try {
                 updateSyncStatus('syncing');
 
-                // Sync user settings (including Gemini API key - stored securely server-side)
+                // Sync user settings (including API keys - stored securely server-side)
                 const { error: settingsError } = await supabaseClient
                     .from('user_settings')
                     .upsert({
@@ -1940,8 +1979,11 @@ Example formats supported:
                         exchange_rate: settings.exchangeRate,
                         vat_rate: settings.vatRate,
                         markup_rate: settings.markupRate,
+                        ai_provider: settings.aiProvider,
                         gemini_api_key: settings.geminiApiKey,
                         gemini_model: settings.geminiModel,
+                        claude_api_key: settings.claudeApiKey,
+                        claude_model: settings.claudeModel,
                         items_per_page: settings.itemsPerPage,
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'user_id' });
@@ -3238,12 +3280,24 @@ Example formats supported:
             document.getElementById('settingsExchangeRate').value = settings.exchangeRate;
             document.getElementById('settingsVatRate').value = settings.vatRate * 100;
             document.getElementById('settingsMarkupRate').value = settings.markupRate * 100;
+            document.getElementById('settingsAiProvider').value = settings.aiProvider || 'gemini';
             document.getElementById('settingsGeminiKey').value = settings.geminiApiKey || '';
             document.getElementById('settingsGeminiModel').value = settings.geminiModel || 'gemini-2.5-flash';
+            document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
+            document.getElementById('settingsClaudeModel').value = settings.claudeModel || 'claude-sonnet-4-20250514';
             document.getElementById('settingsModal').classList.remove('hidden');
+
+            // Show/hide appropriate provider settings
+            toggleAiProviderSettings();
 
             // Update sync status display
             updateSyncStatus(syncStatus);
+        }
+
+        function toggleAiProviderSettings() {
+            const provider = document.getElementById('settingsAiProvider').value;
+            document.getElementById('geminiSettings').style.display = provider === 'gemini' ? 'block' : 'none';
+            document.getElementById('claudeSettings').style.display = provider === 'claude' ? 'block' : 'none';
         }
 
         function closeSettingsModal() {
@@ -3254,8 +3308,11 @@ Example formats supported:
             settings.exchangeRate = parseFloat(document.getElementById('settingsExchangeRate').value) || 3750;
             settings.vatRate = (parseFloat(document.getElementById('settingsVatRate').value) || 18) / 100;
             settings.markupRate = (parseFloat(document.getElementById('settingsMarkupRate').value) || 30) / 100;
+            settings.aiProvider = document.getElementById('settingsAiProvider').value || 'gemini';
             settings.geminiApiKey = document.getElementById('settingsGeminiKey').value.trim();
             settings.geminiModel = document.getElementById('settingsGeminiModel').value || 'gemini-2.5-flash';
+            settings.claudeApiKey = document.getElementById('settingsClaudeKey').value.trim();
+            settings.claudeModel = document.getElementById('settingsClaudeModel').value || 'claude-sonnet-4-20250514';
 
             document.getElementById('exchangeRateInput').value = settings.exchangeRate;
 

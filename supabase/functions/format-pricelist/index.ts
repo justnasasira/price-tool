@@ -6,77 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
-  try {
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    )
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
-    if (userError || !user) {
-      console.error('Auth error:', userError)
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized: ' + (userError?.message || 'No user') }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('User authenticated:', user.email)
-
-    const { data: settings, error: settingsError } = await supabaseClient
-      .from('user_settings')
-      .select('gemini_api_key, gemini_model')
-      .eq('user_id', user.id)
-      .single()
-
-    if (settingsError) {
-      console.error('Settings error:', settingsError)
-    }
-
-    if (!settings?.gemini_api_key) {
-      return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured. Please add it in Settings.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('Gemini API key found, model:', settings.gemini_model)
-
-    const { rawText } = await req.json()
-    if (!rawText) {
-      return new Response(
-        JSON.stringify({ error: 'Missing rawText in request body' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('Input length:', rawText.length)
-
-    const model = settings.gemini_model || 'gemini-2.5-flash'
-
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.gemini_api_key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Convert this price list to a clean format. Include ALL items.
+function buildFormatPrompt(rawText: string) {
+  return `Convert this price list to a clean format. Include ALL items.
 
 FORMAT:
 - First line: month/year (e.g., FEB 2026)
@@ -99,45 +30,148 @@ DATA TO FORMAT:
 ${rawText}
 
 Output ONLY the formatted list. Include ALL products.`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 65536
-          }
-        })
-      }
+}
+
+async function callGeminiAPI(apiKey: string, model: string, prompt: string) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 65536
+        }
+      })
+    }
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error('Gemini API error: ' + errorText)
+  }
+
+  const data = await response.json()
+  if (!data.candidates?.[0]?.content?.parts) {
+    throw new Error('No response from Gemini')
+  }
+
+  return data.candidates[0].content.parts.map((p: any) => p.text || '').join('')
+}
+
+async function callClaudeAPI(apiKey: string, model: string, prompt: string) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: 8192,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error('Claude API error: ' + errorText)
+  }
+
+  const data = await response.json()
+  if (!data.content?.[0]?.text) {
+    throw new Error('No response from Claude')
+  }
+
+  return data.content[0].text
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
     )
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text()
-      console.error('Gemini API error:', errorText)
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    if (userError || !user) {
       return new Response(
-        JSON.stringify({ error: 'Gemini API error: ' + errorText }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const geminiData = await geminiResponse.json()
-    console.log('Gemini response received')
+    const { data: settings } = await supabaseClient
+      .from('user_settings')
+      .select('ai_provider, gemini_api_key, gemini_model, claude_api_key, claude_model')
+      .eq('user_id', user.id)
+      .single()
 
-    if (!geminiData.candidates || geminiData.candidates.length === 0) {
-      console.error('No candidates:', JSON.stringify(geminiData))
+    const aiProvider = settings?.ai_provider || 'gemini'
+
+    // Check if the selected provider has an API key
+    const hasApiKey = aiProvider === 'claude'
+      ? !!settings?.claude_api_key
+      : !!settings?.gemini_api_key
+
+    if (!hasApiKey) {
       return new Response(
-        JSON.stringify({ error: 'No response from AI. Check if model is available.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: `${aiProvider === 'claude' ? 'Claude' : 'Gemini'} API key not configured. Please add it in Settings.` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    let text = geminiData.candidates[0].content?.parts?.map((p: any) => p.text || '').join('') || ''
+    const { rawText } = await req.json()
+    if (!rawText) {
+      return new Response(
+        JSON.stringify({ error: 'Missing rawText in request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('Formatting price list with', aiProvider, '- Input length:', rawText.length)
+
+    const prompt = buildFormatPrompt(rawText)
+
+    // Call the appropriate AI API
+    let responseText: string
+    if (aiProvider === 'claude') {
+      responseText = await callClaudeAPI(
+        settings.claude_api_key,
+        settings.claude_model || 'claude-sonnet-4-20250514',
+        prompt
+      )
+    } else {
+      responseText = await callGeminiAPI(
+        settings.gemini_api_key,
+        settings.gemini_model || 'gemini-2.5-flash',
+        prompt
+      )
+    }
 
     // Remove markdown code blocks if present
-    text = text.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim()
+    responseText = responseText.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim()
 
-    console.log('Output length:', text.length)
+    console.log('Output length:', responseText.length)
 
     return new Response(
-      JSON.stringify({ formattedText: text }),
+      JSON.stringify({ formattedText: responseText }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
